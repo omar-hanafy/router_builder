@@ -4,10 +4,7 @@ import 'package:route_generator/models/models.dart';
 /// Represents a successful deep link resolution.
 @immutable
 class DeepLinkMatch {
-  const DeepLinkMatch({
-    required this.route,
-    required this.args,
-  });
+  const DeepLinkMatch({required this.route, required this.args});
 
   /// Route matched from the deep link.
   final RouteInfo route;
@@ -51,10 +48,7 @@ class DeepLinkMatcher {
     }
 
     final segments = [incoming.host, ...incoming.pathSegments];
-    return Uri(
-      path: '/${segments.join('/')}',
-      queryParameters: params,
-    );
+    return Uri(path: '/${segments.join('/')}', queryParameters: params);
   }
 
   /// Match a normalised URI against all [routes].
@@ -65,8 +59,9 @@ class DeepLinkMatcher {
     Iterable<RouteInfo> routes, {
     Uri? original,
   }) {
-    final effectiveRoutes =
-        routes.where((route) => route.deepLinkAllowed).toList(growable: false);
+    final effectiveRoutes = routes
+        .where((route) => route.deepLinkAllowed)
+        .toList(growable: false);
 
     final segments = appUri.pathSegments;
 
@@ -85,8 +80,7 @@ class DeepLinkMatcher {
     if (segments.isNotEmpty) {
       final key = segments.first.toLowerCase();
       for (final route in effectiveRoutes) {
-        final aliases =
-            route.deepLinkNames.map((alias) => alias.toLowerCase());
+        final aliases = route.deepLinkNames.map((alias) => alias.toLowerCase());
         if (aliases.contains(key)) {
           return DeepLinkMatch(
             route: route,
