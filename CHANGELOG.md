@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 0.1.0 - 2025-01-24
+## 1.0.0 - 2025-01-24
 
 ### 🚀 Major Enhancement: Unified Deep Link System
 

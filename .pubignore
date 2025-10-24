@@ -1,0 +1,8 @@
+# Exclude generated and local environment artifacts from the published package.
+.dart_tool/
+build/
+.DS_Store
+.idea/
+.metadata
+*.iml
+pubspec.lock

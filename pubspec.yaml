@@ -1,6 +1,16 @@
 name: route_generator
-description: "route generator for devs"
-version: 0.1.0
+description: Declarative Flutter navigation and deep link generator with typed routes.
+version: 1.0.0
+homepage: https://github.com/omar-hanafy/route_generator
+repository: https://github.com/omar-hanafy/route_generator
+issue_tracker: https://github.com/omar-hanafy/route_generator/issues
+documentation: https://github.com/omar-hanafy/route_generator#readme
+topics:
+  - flutter
+  - navigation
+  - routing
+  - code-generation
+  - deep-linking
 
 environment:
   sdk: ^3.7.0
@@ -19,5 +29,5 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  very_good_analysis: ^9.0.0
+  flutter_lints: ^6.0.0
   build_runner: ^2.5.4
