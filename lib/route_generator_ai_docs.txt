@@ -1,0 +1,395 @@
+
+
+
+Package: route_generator
+Source: /Users/omarhanafy/Development/MyProjects/custom_packages/route_generator/lib
+Generated: 2025-04-25 02:09:21
+
+Overview:
+Facilitates route management and deep linking in Flutter applications by generating helper code from annotations.
+Single source of truth for both navigation routes and deep links, eliminating the need for separate registrations.
+Use `RT` annotation on static `RouteInfo` fields. Run build_runner to generate `route_info_helper.dart`.
+Core import: 'package:route_generator/route_generator.dart'
+
+--- Annotations ---
+
+class RT
+Purpose: Marks static `RouteInfo` fields for code generation.
+Usage Context: Apply to static `RouteInfo` constants within your route definition classes.
+Example:
+  import 'package:route_generator/route_generator.dart';
+  class AppRoutes {
+    @RT()
+    static const home = RouteInfo('home', builder: ...);
+  }
+
+--- Models ---
+
+abstract class DeepLinkHandler<T>
+Purpose: Generic base class for handling deep links with custom logic beyond simple navigation.
+Usage Context: Extend this class when deep links need to perform actions like saving data, checking conditions, or complex navigation.
+Generic Type: T represents the action type returned (e.g., DeferredAction, Command, etc.)
+Key Methods:
+  - canHandle(Uri uri): `bool` - Determines if this handler should process the URI
+  - createAction(Uri uri, RouteInfo route): `T?` - Creates a typed action for processing
+Best Practice: Create an app-specific base handler to avoid repeating the generic type:
+  abstract class AppDeepLinkHandler extends DeepLinkHandler<DeferredAction<dynamic>> {}
+Example:
+  class ReferralDeepLinkHandler extends AppDeepLinkHandler {
+    const ReferralDeepLinkHandler();
+    
+    @override
+    bool canHandle(Uri uri) => true;
+    
+    @override
+    DeferredAction<dynamic>? createAction(Uri uri, RouteInfo route) {
+      final code = uri.pathSegments.last;
+      return SaveReferralCodeAction(code: code);
+    }
+  }
+
+class RouteInfo
+Purpose: Defines configuration for a single navigation route. Immutable. Serves as input for generating router-specific configurations.
+Integration Guidance: Instances are typically converted into router-specific objects (e.g., `GoRoute`, `StatefulShellBranch` for go_router) via extension methods during router setup. The properties guide this conversion.
+Base Constructor `RouteInfo(String name, {ScreenWidgetBuilder? builder, Widget? child, ScreenPageBuilder? pageBuilder, bool isGlobalOnly = false, bool deepLinkAllowed = true, bool mustBeAuthorized = true, bool visibleNavBar = true, RouterRedirect? redirect, bool isPopupRoute = false, bool isTopLevelOnly = false, List<String> deepLinkNames = const [], DeepLinkHandler? deepLinkHandler, String? path})`
+  - Defines standard routes. Exactly one of `builder`, `child`, or `pageBuilder` must be provided.
+  - name: `String: non-empty` - Unique identifier for the route. Used for lookups and generation.
+  - builder: `ScreenWidgetBuilder?` - Function `(BuildContext context, RouteArgs? args) => Widget`. Builds the route's primary widget.
+  - child: `Widget?` - A pre-built widget instance for the route. Less common for dynamic routes.
+  - pageBuilder: `ScreenPageBuilder?` - Function `(BuildContext context, RouteArgs? args) => Page<dynamic>`. Builds a custom `Page` object (e.g., for custom transitions).
+  - isGlobalOnly: `bool` - Route intended for the root navigator, outside any nested shells. Default: `false`. Affects placement during router setup.
+  - deepLinkAllowed: `bool` - If the route can be targeted by deep links. Default: `true`.
+  - mustBeAuthorized: `bool` - If authentication or specific permissions are required. Checked in router redirects or middleware. Default: `true`.
+  - visibleNavBar: `bool` - Hint for UI shells (e.g., `StatefulShellRoute` builder) whether to show navigation elements. Default: `true`.
+  - redirect: `RouterRedirect?` - Function `(BuildContext context, RouteArgs? args) => FutureOr<String?>`. Pre-navigation logic returning a target route name (`String`) or `null` to proceed. Invoked by the router's redirect mechanism.
+  - isPopupRoute: `bool` - Indicates a route typically presented modally (dialog, bottom sheet). May influence page building or presentation logic. Default: `false`.
+  - isTopLevelOnly: `bool` - Route should ideally only exist at the root of its navigator stack (root or shell). Default: `false`.
+  - deepLinkNames: `List<String>` - Alternative names used for matching deep links. When empty, the route name is used as the default key. Default: `[]`.
+  - deepLinkHandler: `DeepLinkHandler?` - Optional handler for complex deep link logic. When provided, the handler's `createAction` method is called instead of default navigation. Default: `null`.
+  - path: `String?` - Explicit path segment (e.g., 'user/:id'). If `null`, generator defaults to `/$name`. Used to build the final route path.
+Constructor `RouteInfo.redirect(String name, {required RouterRedirect redirect, bool isGlobalOnly = false, bool deepLinkAllowed = true, bool mustBeAuthorized = true, bool visibleNavBar = true, List<String> deepLinkNames = const [], DeepLinkHandler? deepLinkHandler, String? path})`
+  - Defines routes solely for redirection logic via the mandatory `redirect` function. Does not render UI directly.
+Constructor `RouteInfo.branch(String name, {required int? branchIndex, required String? branchKey, required Enum? branchParentType, Widget? child, ScreenWidgetBuilder? builder, ScreenPageBuilder? pageBuilder, bool deepLinkAllowed = true, bool mustBeAuthorized = true, bool visibleNavBar = true, bool isTopLevelOnly = false, List<String> deepLinkNames = const [], DeepLinkHandler? deepLinkHandler, String? path})`
+  - Defines routes belonging to a navigation shell (e.g., tabs managed by `StatefulShellRoute`). Exactly one of `builder`, `child`, or `pageBuilder` must be provided for the branch's root screen.
+  - branchIndex: `int?` - Positional index within the shell's branches. Used for ordering and indexed navigation.
+  - branchKey: `String?` - Unique string identifier for the branch, often used for the `navigatorKey` of the branch's `Navigator`.
+  - branchParentType: `Enum?` - Enum value grouping branches belonging to the same shell (e.g., `NavigationBarType.main`). Crucial for organizing branches in `RouteInfoHelper.branches`. All branches sharing a parent *must* use the same Enum type.
+Properties:
+  - path: `String` - The calculated path segment for this route (`_path` if provided, else `/$name`).
+Methods:
+  - generateName({RouteInfo? parentRoute}): `String` - Creates nested route name (e.g., 'parent/child') if `parentRoute` provided. Used by generated `ScreenRoute` or similar.
+  - generatePath({RouteInfo? parentRoute}): `String` - Creates nested path segment. Returns `name` if `parentRoute` is not null (for go_router sub-routes), otherwise `path`. Used by generated `ScreenRoute` or similar.
+  - report(): `Map<String, Object?>` - Returns a map representation for debugging.
+
+typedef ScreenWidgetBuilder = Widget Function(BuildContext context, RouteArgs? args)
+Purpose: Signature for functions that build a route's widget, receiving context and arguments.
+
+typedef ScreenPageBuilder = Page<dynamic> Function(BuildContext context, RouteArgs? args)
+Purpose: Signature for functions that build a route's `Page` object, allowing custom transitions and page properties.
+
+typedef RouterRedirect = FutureOr<String?> Function(BuildContext context, RouteArgs? args)
+Purpose: Signature for redirection logic. Returns target route name (`String`) to redirect to, or `null`/`Future<null>` to allow navigation.
+
+class RouteArgs
+Purpose: Encapsulates arguments and context for a navigation action. Immutable. Passed to builders and redirects.
+Constructor `RouteArgs(RouteInfo route, {String? id, Map<String, String>? queryParams, Object? object, bool isFromDeeplink = false, bool pushGlobally = false, DuplicateRouteBehavior duplicateBehavior = DuplicateRouteBehavior.duplicate, bool isIdSlug = false})`
+  - route: `RouteInfo` - The target route definition being navigated to.
+  - id: `String?` - Optional identifier, typically extracted from path parameters (e.g., '/users/:id').
+  - queryParams: `Map<String, String>?` - Key-value pairs from the URI query string.
+  - object: `Object?` - Arbitrary data passed programmatically during navigation (not via URI).
+  - isFromDeeplink: `bool` - Flag indicating if navigation originated from an external deep link. Default: `false`.
+  - pushGlobally: `bool` - Hint to the navigation service to use the root navigator. Default: `false`.
+  - duplicateBehavior: `DuplicateRouteBehavior` - Strategy for handling navigation to an existing route instance. Default: `DuplicateRouteBehavior.duplicate`.
+  - isIdSlug: `bool` - Semantic flag indicating if the `id` parameter is a user-friendly slug instead of a primary key. Default: `false`.
+
+enum DuplicateRouteBehavior
+Purpose: Defines behavior when navigating to a route already present in the navigation stack.
+Values: `duplicate` (push a new instance), `refresh` (pop back to existing instance, potentially triggering refresh), `doNothing` (cancel navigation).
+Extensions: `isDuplicate`, `isRefresh`, `isDoNothing` provide boolean checks (including null-safe versions).
+
+--- Code Generation ---
+
+Build Process:
+  - Define routes as static `RouteInfo` fields in Dart classes.
+  - Annotate these fields with `@RT()`.
+  - Execute build command: `flutter pub run build_runner build --delete-conflicting-outputs`.
+  - `GenerateRouteInfoHelperBuilder` processes annotations and generates `lib/route_info_helper.dart`.
+Output: `lib/route_info_helper.dart` (or configured path). Contains `RouteInfoHelper` and `MyRoutes`.
+
+Generated File (`route_info_helper.dart`):
+  - DO NOT EDIT MANUALLY. Regenerated on each build.
+  - Imports: Includes necessary project files and packages based on used types (`branchParentType`, builders, etc.).
+  - `RouteInfoHelper` (abstract class): Static accessors for route data.
+    - `branches`: `Map<EnumType, Map<int?, RouteInfo>>` - Groups branch routes by their `branchParentType` enum value and `branchIndex`. Essential for building `StatefulShellRoute.branches`.
+    - `[enumValueName]Branches`: `List<RouteInfo>` - Convenience static lists for branches of a specific type (e.g., `mainBranches`), sorted by `branchIndex`.
+    - `normalRoutes`: `List<RouteInfo>` - Non-branch, non-global, non-redirect routes. Typically mapped to top-level routes or sub-routes within shells.
+    - `globalRoutes`: `List<RouteInfo>` - Routes marked `isGlobalOnly = true`. Usually added directly to the root router's routes list.
+    - `popupRoutes`: `List<RouteInfo>` - Routes marked `isPopupRoute = true`. Can be filtered for specific handling if needed.
+    - `topLevelRoutes`: `List<RouteInfo>` - Routes marked `isTopLevelOnly = true`. Used for validation or specific placement.
+    - `authorizedRoutes`: `List<RouteInfo>` - Routes marked `mustBeAuthorized = true`. Commonly used in redirects to check permissions.
+    - `deepLinkMap`: `Map<String, RouteInfo>` - Comprehensive map for deep link resolution. Keys include:
+      1. Deep link names from `deepLinkNames` array (if provided)
+      2. Route name (default if no `deepLinkNames`)
+      3. First path segment (if different from above)
+      Build-time conflict detection ensures unique keys. Used by DeepLinkResolver to find routes from URIs.
+    - `allRoutes`: `List<RouteInfo>` - Flat list of all generated routes. Used by `fromName`.
+    - `fromName(String name)`: `RouteInfo?` - Looks up `RouteInfo` by its `name`. Returns `null` if not found.
+    - Branch Helpers (`branchesFor`, `allBranches`, `branchByIndex`, `isRouteInShell`, `branchByKey`): Provide structured access to branch route data based on `branchParentType`, index, or key.
+  - `MyRoutes` (abstract class): Static constants for direct route access.
+    - Maps route names (converted to safe Dart identifiers) to their `RouteInfo` instances (e.g., `MyRoutes.home`, `MyRoutes.userProfile`). Provides type-safe access to routes.
+
+--- Integration Patterns (e.g., with go_router) ---
+1. Define Routes: Use `@RT` and `RouteInfo` constants.
+2. Generate Code: Run `build_runner`.
+3. Create Adapters (Extension Methods): Define extensions on `RouteInfo` to convert it into router-specific objects.
+   - Example: `extension GoRouteAdapters on RouteInfo`
+     - `GoRoute screenRoute({RouteInfo? parentRoute})`: Creates a `GoRoute` using `name`, `path`, `builder`/`pageBuilder`, and potentially `redirect`. Handles nested paths/names using `generatePath`/`generateName`. May wrap a custom `GoRoute` subclass (e.g., `ScreenRoute`) for shared logic.
+     - `StatefulShellBranch branchRoute()`: Creates a `StatefulShellBranch` using `branchKey` for the navigator key and mapping `this` `RouteInfo` (and potentially nested routes) to the branch's `routes` list using `screenRoute`.
+4. Configure Router: In `GoRouter` setup:
+   - Use `MyRoutes` constants for `initialLocation` or specific path/name references.
+   - Map `RouteInfoHelper` lists (`globalRoutes`, `normalRoutes`) using the `screenRoute` extension to generate `GoRoute` lists.
+   - Build `StatefulShellRoute` branches by mapping `RouteInfoHelper.branches[type].values` using the `branchRoute` extension.
+   - Implement global `redirect` logic using `RouteInfoHelper.authorizedRoutes` or other generated lists to check conditions. Use `MyRoutes` for target paths.
+5. Navigate: Use convenience extensions on `RouteInfo` or `RouteArgs` for navigation calls.
+   - Example: `MyRoutes.settings.go(context);` or `RouteArgs(MyRoutes.profile, id: '123').go(context);`
+
+--- Invocation Examples ---
+
+1. Define routes with annotations:
+```dart
+// lib/app_routes.dart
+import 'package:flutter/material.dart';
+import 'package:route_generator/route_generator.dart';
+import 'screens/home_screen.dart'; // Assume these exist
+import 'screens/settings_screen.dart';
+import 'screens/user_profile_screen.dart';
+import 'screens/auth_screen.dart';
+import 'screens/not_found_screen.dart';
+
+enum AppShell { main, profile } // Example shells
+
+class AppRoutes {
+  // Branch Route
+  @RT()
+  static const home = RouteInfo.branch(
+    'home',
+    branchParentType: AppShell.main,
+    branchIndex: 0,
+    branchKey: 'main_home_key',
+    builder: (context, args) => HomeScreen(),
+    visibleNavBar: true,
+  );
+
+  // Normal Route requiring Auth
+  @RT()
+  static final settings = RouteInfo(
+    'settings',
+    builder: (context, args) => SettingsScreen(),
+    mustBeAuthorized: true,
+  );
+
+  // Normal Route with Path Parameter and Deep Link
+  @RT()
+  static final userProfile = RouteInfo(
+    'profile', // name
+    path: 'profile/:id', // path used by router
+    builder: (context, args) => UserProfileScreen(userId: args?.id),
+    deepLinkNames: ['user'], // Alternative deep link: /user/:id
+    mustBeAuthorized: true,
+  );
+
+  // Global Route (e.g., Auth)
+  @RT()
+  static final auth = RouteInfo(
+    'auth',
+    builder: (context, args) => AuthScreen(),
+    isGlobalOnly: true,
+    mustBeAuthorized: false, // Auth screen itself doesn't require auth
+  );
+
+   // Not Found Route
+  @RT()
+  static const notFound = RouteInfo(
+    'notFound',
+    path: '/404',
+    builder: (ctx, args) => const NotFoundScreen(),
+  );
+  
+  // Deep Link with Custom Handler
+  @RT()
+  static final referral = RouteInfo(
+    'referral',
+    path: 'referral/:code',
+    deepLinkHandler: const ReferralDeepLinkHandler(),
+    builder: (ctx, args) => ReferralScreen(code: args?.id),
+  );
+}
+
+// First, create an app-specific base handler
+abstract class AppDeepLinkHandler extends DeepLinkHandler<DeferredAction<dynamic>> {}
+
+// Custom Deep Link Handler Example
+class ReferralDeepLinkHandler extends AppDeepLinkHandler {
+  const ReferralDeepLinkHandler();
+  
+  @override
+  bool canHandle(Uri uri) => true;
+  
+  @override
+  DeferredAction<dynamic>? createAction(Uri uri, RouteInfo route) {
+    final code = uri.pathSegments.last;
+    return SaveReferralCodeAction(code: code);
+  }
+}
+```
+
+2. Run build runner: `flutter pub run build_runner build --delete-conflicting-outputs`
+
+3. Define GoRouter Adapter Extensions (Conceptual - needs actual implementation):
+```dart
+// lib/router_extensions.dart
+import 'package:go_router/go_router.dart';
+import 'package:route_generator/route_generator.dart';
+// Assume ScreenRoute is a custom GoRoute wrapper if needed
+// import 'screen_route.dart';
+
+extension GoRouteAdapters on RouteInfo {
+  // Creates a GoRoute from RouteInfo
+  GoRoute screenRoute({RouteInfo? parentRoute}) {
+    // Use a custom ScreenRoute or standard GoRoute
+    return GoRoute(
+      path: generatePath(parentRoute: parentRoute), // Handles nested path segment
+      name: generateName(parentRoute: parentRoute), // Handles nested name
+      builder: builder != null ? (context, state) => builder!(context, _argsFromState(state)) : null,
+      pageBuilder: pageBuilder != null ? (context, state) => pageBuilder!(context, _argsFromState(state)) : null,
+      redirect: redirect != null ? (context, state) => redirect!(context, _argsFromState(state)) : null,
+      // Potentially map other RouteInfo props like routes for sub-routes
+    );
+  }
+
+  // Creates a StatefulShellBranch from a branch RouteInfo
+  StatefulShellBranch branchRoute() {
+    assert(isBranch, 'branchRoute() can only be called on branch RouteInfo');
+    return StatefulShellBranch(
+      navigatorKey: GlobalKey<NavigatorState>(debugLabel: branchKey ?? name),
+      routes: [
+        // The main screen for the branch
+        screenRoute(),
+        // Potentially add normal routes nested under this branch
+        // ... RouteInfoHelper.normalRoutes.where((r) => r.parent == this).map((e) => e.screenRoute(parentRoute: this))...
+      ],
+    );
+  }
+
+  // Helper to create RouteArgs from GoRouterState
+  RouteArgs _argsFromState(GoRouterState state) {
+    return RouteArgs(
+      this,
+      id: state.pathParameters['id'], // Assuming 'id' convention
+      queryParams: state.uri.queryParameters,
+      object: state.extra,
+      // isFromDeeplink might need separate logic
+    );
+  }
+}
+
+// Convenience Navigation Extensions
+extension NavigationExtensions on RouteInfo {
+  Future<T?> go<T extends Object?>(BuildContext context, {String? id, Object? extra, Map<String, String>? queryParams}) {
+    final args = RouteArgs(this, id: id, queryParams: queryParams, object: extra);
+    // Assumes context.goPush or similar extension exists
+    return context.goPush(args);
+  }
+}
+extension RouteArgsNavigation on RouteArgs {
+   Future<T?> go<T extends Object?>(BuildContext context) {
+     return context.goPush(this);
+   }
+}
+// Assume BuildContext extension `goPush` exists
+```
+
+4. Configure GoRouter using generated helpers and extensions:
+```dart
+// lib/router.dart
+import 'package:go_router/go_router.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // If using Riverpod
+import 'route_info_helper.dart'; // Generated
+import 'app_routes.dart'; // Route definitions
+import 'router_extensions.dart'; // Adapter extensions
+// Assume checkAuth function exists
+Future<bool> checkAuth() async => true;
+
+final goRouterProvider = Provider<GoRouter>((ref) {
+  return GoRouter(
+    initialLocation: MyRoutes.home.path, // Use generated constant
+    debugLogDiagnostics: true,
+    routes: <RouteBase>[
+      // Map global routes using the adapter extension
+      ...RouteInfoHelper.globalRoutes.map((e) => e.screenRoute()),
+
+      // Define Shell Route using branches from helper and adapter
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          // Return your shell widget (e.g., Scaffold with BottomNavigationBar)
+          return AppShellWidget(navigationShell: navigationShell);
+        },
+        branches: RouteInfoHelper.branches[AppShell.main]! // Access branches for specific shell
+            .values
+            .map((routeInfo) => routeInfo.branchRoute()) // Convert using adapter
+            .toList(),
+      ),
+      // Potentially add other shells or top-level normal routes
+      // ...RouteInfoHelper.normalRoutes.where(...).map((e)=>e.screenRoute())...
+    ],
+    errorBuilder: (context, state) => MyRoutes.notFound.builder!(context, null), // Fallback error screen
+    redirect: (context, state) async {
+      final currentRouteName = GoRouterState.of(context).topRoute?.name;
+      final targetRouteInfo = RouteInfoHelper.fromName(state.matchedLocation.split('/').last) ?? // Basic name extraction logic
+                             (state.matchedLocation == '/' ? MyRoutes.home : null); // Handle root/initial case
+
+      if (targetRouteInfo == null) return MyRoutes.notFound.path; // Redirect if route unknown
+
+      // Check auth for routes marked `mustBeAuthorized`
+      if (targetRouteInfo.mustBeAuthorized) {
+        final bool loggedIn = await checkAuth(); // Your auth logic
+        // Redirect to auth screen if not logged in AND not already going there
+        if (!loggedIn && targetRouteInfo != MyRoutes.auth) {
+          return MyRoutes.auth.path; // Use generated path
+        }
+      }
+
+      // Allow navigation if checks pass
+      return null;
+    },
+  );
+});
+```
+
+5. Navigate using convenience extensions:
+```dart
+// In a widget button's onPressed:
+onPressed: () {
+  MyRoutes.settings.go(context); // Navigate by RouteInfo
+}
+
+// Navigate with arguments:
+onPressed: () {
+  MyRoutes.userProfile.go(context, id: 'user123');
+}
+
+// Navigate using RouteArgs:
+onPressed: () {
+  final args = RouteArgs(MyRoutes.userProfile, id: 'user456', queryParams: {'mode': 'edit'});
+  args.go(context); // Navigate using RouteArgs instance
+}
+```
+
+--- Operational Notes ---
+Dependencies: `analyzer`, `build`, `dart_helper_utils`, `dart_style`, `glob`, `equatable`, `flutter`. Build tool (`build_runner`). Router package (e.g., `go_router`).
+Side Effects: Build process generates/overwrites `lib/route_info_helper.dart`.
+Platform: Requires Dart SDK and Flutter environment.
+Error Handling: Build errors reported by `build_runner`. `RouteInfo` constructor assertions. Router implementation handles runtime navigation errors (e.g., route not found -> `errorBuilder`). `RouteInfoHelper.fromName` returns `null` for unknown names. `redirect` logic handles auth/permission errors.
+Concurrency: Build process is separate. Generated code is static. Runtime thread safety depends on application state management and router behavior.
+Performance: Build time proportional to project size/number of routes. Runtime lookup via `RouteInfoHelper` or `MyRoutes` is efficient (map/static access).

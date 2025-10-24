@@ -1,0 +1,7 @@
+builders:
+  generate_route_info_helper:
+    import: "package:route_generator/generators/generate_route_info_helper.dart"
+    builder_factories: [ "generateRouteInfoHelperBuilder" ]
+    build_extensions: { r'$package$': [ "lib/route_info_helper.dart" ] }
+    auto_apply: dependents
+    build_to: source
