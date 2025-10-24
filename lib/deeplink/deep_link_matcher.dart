@@ -65,12 +65,22 @@ class DeepLinkMatcher {
     Iterable<RouteInfo> routes, {
     Uri? original,
   }) {
-    final effectiveRoutes =
-        routes.where((route) => route.deepLinkAllowed).toList(growable: false);
-
+    final effectiveRoutes = routes
+        .where((route) => route.deepLinkAllowed)
+        .toList(growable: false);
     final segments = appUri.pathSegments;
 
-    if (segments.isNotEmpty) {
+    if (segments.isEmpty) {
+      for (final route in effectiveRoutes) {
+        final templateSegments = _templateSegments(route.path);
+        if (templateSegments.isEmpty) {
+          return DeepLinkMatch(
+            route: route,
+            args: _buildArgs(route, appUri, original),
+          );
+        }
+      }
+    } else {
       for (final route in effectiveRoutes) {
         final templateSegments = _templateSegments(route.path);
         if (_matchesTemplate(segments, templateSegments)) {
@@ -80,13 +90,10 @@ class DeepLinkMatcher {
           );
         }
       }
-    }
 
-    if (segments.isNotEmpty) {
       final key = segments.first.toLowerCase();
       for (final route in effectiveRoutes) {
-        final aliases =
-            route.deepLinkNames.map((alias) => alias.toLowerCase());
+        final aliases = route.deepLinkNames.map((alias) => alias.toLowerCase());
         if (aliases.contains(key)) {
           return DeepLinkMatch(
             route: route,
