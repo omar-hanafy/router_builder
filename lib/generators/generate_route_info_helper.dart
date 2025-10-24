@@ -1,13 +1,9 @@
-//
-// ignore_for_file: implementation_imports, deprecated_member_use
 import 'dart:async';
 
 // External package imports
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
-// Needed to access transitional APIs like LibraryElementImpl for units access
-import 'package:analyzer/src/dart/element/element.dart';
 import 'package:build/build.dart';
 import 'package:dart_helper_utils/dart_helper_utils.dart';
 import 'package:dart_style/dart_style.dart';
@@ -86,24 +82,17 @@ class GenerateRouteInfoHelperBuilder implements Builder {
   ) async {
     final annotatedFields = <Map<String, Object?>>[];
 
-    // Using LibraryElementImpl to access units (transitional API)
-    final units =
-        library is LibraryElementImpl
-            ? library.units
-            : [library.definingCompilationUnit];
-    for (final unit in units) {
-      for (final classElement in unit.classes) {
-        for (final field in classElement.fields) {
-          if (field.isStatic && field.isPublic) {
-            final routeAnnotation = _getRouteAnnotation(field);
-            if (routeAnnotation != null) {
-              final routeData = await _extractRouteData(
-                field,
-                classElement,
-                buildStep,
-              );
-              annotatedFields.add(routeData);
-            }
+    for (final classElement in library.classes) {
+      for (final field in classElement.fields) {
+        if (field.isStatic && field.isPublic) {
+          final routeAnnotation = _getRouteAnnotation(field);
+          if (routeAnnotation != null) {
+            final routeData = await _extractRouteData(
+              field,
+              classElement,
+              buildStep,
+            );
+            annotatedFields.add(routeData);
           }
         }
       }
@@ -114,11 +103,13 @@ class GenerateRouteInfoHelperBuilder implements Builder {
 
   /// Retrieves the `RT` annotation from a field's metadata if present, or returns null.
   DartObject? _getRouteAnnotation(FieldElement field) {
-    for (final annotation in field.metadata) {
+    for (final annotation in field.metadata.annotations) {
       final element = annotation.element;
-      if (element is ConstructorElement &&
-          element.enclosingElement3.name == 'RT') {
-        return annotation.computeConstantValue();
+      if (element is ConstructorElement) {
+        final enclosingElement = element.enclosingElement;
+        if (enclosingElement.name == 'RT') {
+          return annotation.computeConstantValue();
+        }
       }
     }
     return null;
@@ -175,7 +166,10 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     FieldElement field,
     BuildStep buildStep,
   ) async {
-    final fieldNode = await buildStep.resolver.astNodeFor(field, resolve: true);
+    final fieldNode = await buildStep.resolver.astNodeFor(
+      field.firstFragment,
+      resolve: true,
+    );
     if (fieldNode is VariableDeclaration) {
       final initializer = fieldNode.initializer;
       if (initializer is InstanceCreationExpression) {
@@ -227,15 +221,15 @@ class GenerateRouteInfoHelperBuilder implements Builder {
           data['branchIndex'] = expression.value;
         }
       case 'branchParentType':
-        data['branchParentType'] =
-            expression.toSource(); // e.g., 'MyShellType.home'
+        data['branchParentType'] = expression
+            .toSource(); // e.g., 'MyShellType.home'
         final enumType = expression.staticType;
         final enumElement = enumType?.element;
         if (enumElement is EnumElement) {
           data['branchParentType_type'] =
               enumElement.name; // e.g., 'MyShellType'
           final enumLibrary = enumElement.library;
-          final importUri = enumLibrary.source.uri.toString();
+          final importUri = enumLibrary.uri.toString();
           data['branchParentType_import'] =
               importUri; // e.g., 'package:my_app/shell.dart'
         } else {
@@ -273,12 +267,11 @@ class GenerateRouteInfoHelperBuilder implements Builder {
         }
       case 'deepLinkNames':
         if (expression is ListLiteral) {
-          final names =
-              expression.elements
-                  .whereType<StringLiteral>()
-                  .map((e) => e.stringValue)
-                  .whereType<String>()
-                  .toList();
+          final names = expression.elements
+              .whereType<StringLiteral>()
+              .map((e) => e.stringValue)
+              .whereType<String>()
+              .toList();
           data['deepLinkNames'] = names;
         }
       case 'path':
@@ -334,17 +327,16 @@ class GenerateRouteInfoHelperBuilder implements Builder {
   /// Generates the complete source code for `route_info_helper.dart`, including
   /// a header comment and the definitions of [RouteInfoHelper] and [MyRoutes].
   String _generateRouteInfoHelperCode(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          // Generated file header
-          ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND.')
-          ..writeln('//')
-          ..writeln(
-            '// This file is generated by the GenerateRouteInfoHelperBuilder.',
-          )
-          ..writeln('// To update it, run:')
-          ..writeln('//   flutter pub run build_runner build')
-          ..writeln();
+    final buffer = StringBuffer()
+      // Generated file header
+      ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND.')
+      ..writeln('//')
+      ..writeln(
+        '// This file is generated by the GenerateRouteInfoHelperBuilder.',
+      )
+      ..writeln('// To update it, run:')
+      ..writeln('//   flutter pub run build_runner build')
+      ..writeln();
 
     _writeImports(buffer, fields);
     _writeRouteInfoHelperClass(buffer, fields);
@@ -354,12 +346,12 @@ class GenerateRouteInfoHelperBuilder implements Builder {
 
   /// Writes import statements to the buffer.
   void _writeImports(StringBuffer buffer, List<Map<String, Object?>> fields) {
-    final importUris =
-        fields.map((f) => f.getString('importUri')).toSet()..addAll([
-          'package:dart_helper_utils/dart_helper_utils.dart',
-          'package:router_builder/router_builder.dart',
-          'package:router_builder/deeplink/deep_link_matcher.dart',
-        ]);
+    final importUris = fields.map((f) => f.getString('importUri')).toSet()
+      ..addAll([
+        'package:dart_helper_utils/dart_helper_utils.dart',
+        'package:router_builder/router_builder.dart',
+        'package:router_builder/deeplink/deep_link_matcher.dart',
+      ]);
 
     for (final field in fields) {
       final bpImport = field['branchParentType_import'];
@@ -460,18 +452,17 @@ class GenerateRouteInfoHelperBuilder implements Builder {
       });
     }
 
-    final buffer =
-        StringBuffer()
-          ..writeln(
-            '  /// Map of enum values to their corresponding branch routes.',
-          )
-          ..writeln('  ///')
-          ..writeln(
-            '  /// All branch routes must use the enum type `$enumTypeName`.',
-          )
-          ..writeln(
-            '  static final Map<$enumTypeName, Map<int?, RouteInfo>> branches = {',
-          );
+    final buffer = StringBuffer()
+      ..writeln(
+        '  /// Map of enum values to their corresponding branch routes.',
+      )
+      ..writeln('  ///')
+      ..writeln(
+        '  /// All branch routes must use the enum type `$enumTypeName`.',
+      )
+      ..writeln(
+        '  static final Map<$enumTypeName, Map<int?, RouteInfo>> branches = {',
+      );
     grouped.forEach((parentID, list) {
       buffer
         ..writeln('    $parentID: {')
@@ -553,12 +544,11 @@ class GenerateRouteInfoHelperBuilder implements Builder {
 
   /// Generates a list of normal routes (non-branch, non-global, non-redirection).
   String _generateNormalRoutesList(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          ..writeln(
-            '  /// List of normal routes (non-branch, non-global, non-redirection).',
-          )
-          ..writeln('  static final List<RouteInfo> normalRoutes = [');
+    final buffer = StringBuffer()
+      ..writeln(
+        '  /// List of normal routes (non-branch, non-global, non-redirection).',
+      )
+      ..writeln('  static final List<RouteInfo> normalRoutes = [');
     for (final field in fields) {
       if (field['isBranch'] != true &&
           field['isGlobalOnly'] != true &&
@@ -572,10 +562,9 @@ class GenerateRouteInfoHelperBuilder implements Builder {
 
   /// Generates a list of global routes.
   String _generateGlobalRoutesList(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          ..writeln('  /// List of global routes.')
-          ..writeln('  static final List<RouteInfo> globalRoutes = [');
+    final buffer = StringBuffer()
+      ..writeln('  /// List of global routes.')
+      ..writeln('  static final List<RouteInfo> globalRoutes = [');
     for (final field in fields) {
       if (field['isGlobalOnly'] == true &&
           field['isBranch'] != true &&
@@ -589,10 +578,9 @@ class GenerateRouteInfoHelperBuilder implements Builder {
 
   /// Generates a list of popup routes.
   String _generatePopupRoutesList(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          ..writeln('  /// List of popup routes.')
-          ..writeln('  static final List<RouteInfo> popupRoutes = [');
+    final buffer = StringBuffer()
+      ..writeln('  /// List of popup routes.')
+      ..writeln('  static final List<RouteInfo> popupRoutes = [');
     for (final field in fields) {
       if (field['isPopupRoute'] == true) {
         buffer.writeln('    ${field['className']}.${field['fieldName']},');
@@ -604,10 +592,9 @@ class GenerateRouteInfoHelperBuilder implements Builder {
 
   /// Generates a list of top-level-only routes.
   String _generateTopLevelRoutesList(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          ..writeln('  /// List of top-level-only routes.')
-          ..writeln('  static final List<RouteInfo> topLevelRoutes = [');
+    final buffer = StringBuffer()
+      ..writeln('  /// List of top-level-only routes.')
+      ..writeln('  static final List<RouteInfo> topLevelRoutes = [');
     for (final field in fields) {
       if (field['isTopLevelOnly'] == true) {
         buffer.writeln('    ${field['className']}.${field['fieldName']},');
@@ -619,10 +606,9 @@ class GenerateRouteInfoHelperBuilder implements Builder {
 
   /// Generates a list of routes that require authorization.
   String _generateAuthorizedRoutesList(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          ..writeln('  /// List of routes that require authorization.')
-          ..writeln('  static final List<RouteInfo> authorizedRoutes = [');
+    final buffer = StringBuffer()
+      ..writeln('  /// List of routes that require authorization.')
+      ..writeln('  static final List<RouteInfo> authorizedRoutes = [');
     for (final field in fields) {
       if (field['mustBeAuthorized'] == true) {
         buffer.writeln('    ${field['className']}.${field['fieldName']},');
@@ -640,6 +626,13 @@ class GenerateRouteInfoHelperBuilder implements Builder {
 
     // Build map and detect conflicts
     for (final field in fields) {
+      if (field['deepLinkAllowed'] == false) {
+        continue;
+      }
+      if (field['forRedirectionOnly'] == true) {
+        continue;
+      }
+
       final routeReference = "${field['className']}.${field['fieldName']}";
       final keysToAdd = _extractAllRouteKeys(field);
 
@@ -810,52 +803,51 @@ class GenerateRouteInfoHelperBuilder implements Builder {
       }
     }
 
-    final buffer =
-        StringBuffer()
-          ..writeln(
-            '  /// Returns the map of branch routes for the given shell enum value.',
-          )
-          ..writeln(
-            '  static Map<int?, RouteInfo>? branchesFor($enumTypeName shell) {',
-          )
-          ..writeln('    return branches[shell];')
-          ..writeln('  }')
-          ..writeln()
-          ..writeln('  /// Returns a list of all branch routes.')
-          ..writeln('  static List<RouteInfo> allBranches() {')
-          ..writeln(
-            '    return branches.values.expand((innerMap) => innerMap.values).toList();',
-          )
-          ..writeln('  }')
-          ..writeln()
-          ..writeln(
-            '  /// Returns the branch route for the given shell and index, if it exists.',
-          )
-          ..writeln(
-            '  static RouteInfo? branchByIndex($enumTypeName shell, int? index) {',
-          )
-          ..writeln('    return branches[shell]?[index];')
-          ..writeln('  }')
-          ..writeln()
-          ..writeln(
-            '  /// Checks if a given route belongs to the specified shell.',
-          )
-          ..writeln(
-            '  static bool isRouteInShell(RouteInfo route, $enumTypeName shell) {',
-          )
-          ..writeln(
-            '    return branches[shell]?.containsValue(route) ?? false;',
-          )
-          ..writeln('  }')
-          ..writeln()
-          ..writeln('  /// Finds a branch route by its key.')
-          ..writeln('  static RouteInfo? branchByKey(String key) {')
-          ..writeln('    return branches.values')
-          ..writeln('        .expand((innerMap) => innerMap.values)')
-          ..writeln(
-            '        .firstWhereOrNull((route) => route.branchKey == key);',
-          )
-          ..writeln('  }');
+    final buffer = StringBuffer()
+      ..writeln(
+        '  /// Returns the map of branch routes for the given shell enum value.',
+      )
+      ..writeln(
+        '  static Map<int?, RouteInfo>? branchesFor($enumTypeName shell) {',
+      )
+      ..writeln('    return branches[shell];')
+      ..writeln('  }')
+      ..writeln()
+      ..writeln('  /// Returns a list of all branch routes.')
+      ..writeln('  static List<RouteInfo> allBranches() {')
+      ..writeln(
+        '    return branches.values.expand((innerMap) => innerMap.values).toList();',
+      )
+      ..writeln('  }')
+      ..writeln()
+      ..writeln(
+        '  /// Returns the branch route for the given shell and index, if it exists.',
+      )
+      ..writeln(
+        '  static RouteInfo? branchByIndex($enumTypeName shell, int? index) {',
+      )
+      ..writeln('    return branches[shell]?[index];')
+      ..writeln('  }')
+      ..writeln()
+      ..writeln(
+        '  /// Checks if a given route belongs to the specified shell.',
+      )
+      ..writeln(
+        '  static bool isRouteInShell(RouteInfo route, $enumTypeName shell) {',
+      )
+      ..writeln(
+        '    return branches[shell]?.containsValue(route) ?? false;',
+      )
+      ..writeln('  }')
+      ..writeln()
+      ..writeln('  /// Finds a branch route by its key.')
+      ..writeln('  static RouteInfo? branchByKey(String key) {')
+      ..writeln('    return branches.values')
+      ..writeln('        .expand((innerMap) => innerMap.values)')
+      ..writeln(
+        '        .firstWhereOrNull((route) => route.branchKey == key);',
+      )
+      ..writeln('  }');
     return buffer.toString();
   }
 
