@@ -357,8 +357,8 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     final importUris =
         fields.map((f) => f.getString('importUri')).toSet()..addAll([
           'package:dart_helper_utils/dart_helper_utils.dart',
-          'package:route_generator/route_generator.dart',
-          'package:route_generator/deeplink/deep_link_matcher.dart',
+          'package:router_builder/router_builder.dart',
+          'package:router_builder/deeplink/deep_link_matcher.dart',
         ]);
 
     for (final field in fields) {

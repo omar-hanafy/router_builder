@@ -1,10 +1,10 @@
-name: route_generator
+name: router_builder
 description: Declarative Flutter navigation and deep link generator with typed routes.
 version: 1.0.0
-homepage: https://github.com/omar-hanafy/route_generator
-repository: https://github.com/omar-hanafy/route_generator
-issue_tracker: https://github.com/omar-hanafy/route_generator/issues
-documentation: https://github.com/omar-hanafy/route_generator#readme
+homepage: https://github.com/omar-hanafy/router_builder
+repository: https://github.com/omar-hanafy/router_builder
+issue_tracker: https://github.com/omar-hanafy/router_builder/issues
+documentation: https://github.com/omar-hanafy/router_builder#readme
 topics:
   - flutter
   - navigation

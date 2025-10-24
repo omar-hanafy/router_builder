@@ -1,6 +1,6 @@
-# Route Generator
+# Router Builder
 
-A Flutter package that simplifies route management and deep linking through code generation. Define your routes once, and let the generator handle the boilerplate.
+Router Builder simplifies Flutter route management and deep linking through code generation. Define your routes once, and let the generator handle the boilerplate.
 
 ## Features
 
@@ -19,7 +19,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  route_generator: ^1.0.0
+  router_builder: ^1.0.0
 
 dev_dependencies:
   build_runner: ^2.4.0
@@ -30,7 +30,7 @@ dev_dependencies:
 1. **Define your routes** using the `@RT()` annotation:
 
 ```dart
-import 'package:route_generator/route_generator.dart';
+import 'package:router_builder/router_builder.dart';
 import 'screens/home_screen.dart';
 import 'screens/profile_screen.dart';
 

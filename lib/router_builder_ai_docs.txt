@@ -1,15 +1,15 @@
 
 
 
-Package: route_generator
-Source: /Users/omarhanafy/Development/MyProjects/custom_packages/route_generator/lib
+Package: router_builder
+Source: /Users/omarhanafy/Development/MyProjects/custom_packages/router_builder/lib
 Generated: 2025-04-25 02:09:21
 
 Overview:
 Facilitates route management and deep linking in Flutter applications by generating helper code from annotations.
 Single source of truth for both navigation routes and deep links, eliminating the need for separate registrations.
 Use `RT` annotation on static `RouteInfo` fields. Run build_runner to generate `route_info_helper.dart`.
-Core import: 'package:route_generator/route_generator.dart'
+Core import: 'package:router_builder/router_builder.dart'
 
 --- Annotations ---
 
@@ -17,7 +17,7 @@ class RT
 Purpose: Marks static `RouteInfo` fields for code generation.
 Usage Context: Apply to static `RouteInfo` constants within your route definition classes.
 Example:
-  import 'package:route_generator/route_generator.dart';
+  import 'package:router_builder/router_builder.dart';
   class AppRoutes {
     @RT()
     static const home = RouteInfo('home', builder: ...);
@@ -159,7 +159,7 @@ Generated File (`route_info_helper.dart`):
 ```dart
 // lib/app_routes.dart
 import 'package:flutter/material.dart';
-import 'package:route_generator/route_generator.dart';
+import 'package:router_builder/router_builder.dart';
 import 'screens/home_screen.dart'; // Assume these exist
 import 'screens/settings_screen.dart';
 import 'screens/user_profile_screen.dart';
@@ -249,7 +249,7 @@ class ReferralDeepLinkHandler extends AppDeepLinkHandler {
 ```dart
 // lib/router_extensions.dart
 import 'package:go_router/go_router.dart';
-import 'package:route_generator/route_generator.dart';
+import 'package:router_builder/router_builder.dart';
 // Assume ScreenRoute is a custom GoRoute wrapper if needed
 // import 'screen_route.dart';
 

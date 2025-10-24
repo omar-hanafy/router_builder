@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:route_generator/models/route_info.dart';
+import 'package:router_builder/models/route_info.dart';
 
 /// Abstract base class for handling deep links with custom logic.
 ///

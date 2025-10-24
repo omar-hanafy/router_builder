@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:route_generator/models/models.dart';
+import 'package:router_builder/models/models.dart';
 
 /// Represents a successful deep link resolution.
 @immutable

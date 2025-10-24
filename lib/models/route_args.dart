@@ -1,5 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:route_generator/models/route_info.dart';
+import 'package:router_builder/models/route_info.dart';
 
 /// Encapsulates arguments for navigation actions.
 ///

@@ -1,8 +1,8 @@
-# Route Generator - Deep Link Migration Guide
+# Router Builder - Deep Link Migration Guide
 
 ## Overview
 
-The route_generator package now provides a unified system for handling both navigation and deep links. This guide explains how to migrate from the old `DeepLinkRegistry` system to the new integrated approach.
+The router_builder package now provides a unified system for handling both navigation and deep links. This guide explains how to migrate from the old `DeepLinkRegistry` system to the new integrated approach.
 
 ## What's Changed
 
@@ -186,7 +186,7 @@ Create a simple resolver in your app to use the enhanced deep link map:
 
 ```dart
 // lib/core/router_config/services/deep_link_resolver.dart
-import 'package:route_generator/route_generator.dart';
+import 'package:router_builder/router_builder.dart';
 import 'package:saber/core/deferred_actions/models/deferred_action.dart';
 import 'package:saber/route_info_helper.dart'; // Generated file
 
