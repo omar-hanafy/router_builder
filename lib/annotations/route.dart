@@ -9,5 +9,6 @@
 /// static const home = RouteInfo('home', builder: (_, __) => HomeScreen());
 /// ```
 class RT {
+  /// Creates an [RT] annotation.
   const RT();
 }

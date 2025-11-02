@@ -4,6 +4,7 @@ import 'package:router_builder/models/models.dart';
 /// Represents a successful deep link resolution.
 @immutable
 class DeepLinkMatch {
+  /// Creates a deep link match with the resolved [route] and [args].
   const DeepLinkMatch({required this.route, required this.args});
 
   /// Route matched from the deep link.
@@ -15,6 +16,7 @@ class DeepLinkMatch {
 
 /// Utility that normalises incoming URIs and matches them against app routes.
 class DeepLinkMatcher {
+  /// Creates a stateless deep link matcher.
   const DeepLinkMatcher();
 
   /// Convert a deep link URI into an internal, path-only URI.

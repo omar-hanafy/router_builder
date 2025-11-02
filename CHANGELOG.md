@@ -1,7 +1,10 @@
 # CHANGELOG
 
+## 1.1.1 - 2025-10-24
+- Documented all public APIs.
+
 ## 1.1.0 - 2025-10-24
-- Updated exports
+- Updated exports.
 
 ## 1.0.0 - 2025-01-24
 

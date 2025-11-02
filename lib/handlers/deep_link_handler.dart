@@ -65,6 +65,7 @@ abstract class DeepLinkHandler<T extends Object?> {
   T? createAction(Uri uri, RouteInfo route);
 }
 
+/// Convenience utilities for working with path segments when handling deep links.
 extension DeepLinkHandlerUriExtension on Uri {
   /// Helper: extract the last segment as a generic id.
   /// Useful for simple '/.../:id' patterns.
