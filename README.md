@@ -19,10 +19,10 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  router_builder: ^1.0.0
+  router_builder: ^1.1.1
 
 dev_dependencies:
-  build_runner: ^2.4.0
+  build_runner: ^2.5.4
 ```
 
 ### Basic Usage
