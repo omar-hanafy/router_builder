@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.1.1 - 2025-10-24
+- Documented all public APIs.
+
+## 1.1.0 - 2025-10-24
+- Updated exports.
+
 ## 1.0.0 - 2025-01-24
 
 ### 🚀 Major Enhancement: Unified Deep Link System

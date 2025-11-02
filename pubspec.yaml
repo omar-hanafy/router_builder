@@ -1,6 +1,6 @@
 name: router_builder
 description: Declarative Flutter navigation and deep link generator with typed routes.
-version: 1.0.0
+version: 1.1.1
 homepage: https://github.com/omar-hanafy/router_builder
 repository: https://github.com/omar-hanafy/router_builder
 issue_tracker: https://github.com/omar-hanafy/router_builder/issues
@@ -27,6 +27,8 @@ dependencies:
   dart_style: ^3.1.2
 
 dev_dependencies:
+  build_runner: ^2.5.4
+  flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0

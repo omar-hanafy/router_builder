@@ -6,6 +6,7 @@ import 'package:router_builder/models/route_info.dart';
 /// RouteArgs combines the target route with navigation parameters
 /// such as IDs, query parameters, and behavioral flags.
 class RouteArgs extends Equatable {
+  /// Creates navigation arguments for the provided [route].
   const RouteArgs(
     this.route, {
     this.id,
@@ -107,6 +108,7 @@ class RouteArgs extends Equatable {
   final Map<String, String>? queryParams;
 
   /// Create a copy with overridden fields.
+  /// Returns a new [RouteArgs] instance with the given overrides applied.
   RouteArgs copyWith({
     RouteInfo? route,
     String? id,
@@ -133,6 +135,7 @@ class RouteArgs extends Equatable {
     isIdSlug: isIdSlug ?? this.isIdSlug,
   );
 
+  /// Returns a copy with navigation context preserved but flow metadata cleared.
   RouteArgs cleared() => RouteArgs(
     route,
     id: id,
@@ -145,6 +148,7 @@ class RouteArgs extends Equatable {
     isIdSlug: isIdSlug,
   );
 
+  /// Fields used by [Equatable] to compare instances.
   @override
   List<Object?> get props => [
     route,
@@ -172,21 +176,30 @@ enum DuplicateRouteBehavior {
   /// Cancel the navigation entirely.
   doNothing;
 
+  /// Returns `true` when this behavior pushes a new instance.
   bool get isDuplicate => this == duplicate;
 
+  /// Returns `true` when this behavior replaces the existing route.
   bool get isRefresh => this == refresh;
 
+  /// Returns `true` when this behavior cancels navigation.
   bool get isDoNothing => this == doNothing;
 }
 
+/// Convenient boolean checks for nullable [DuplicateRouteBehavior] instances.
 extension DuplicateRouteBehaviorEx on DuplicateRouteBehavior? {
+  /// Returns `true` when the optional behavior duplicates the route.
   bool get isDuplicate => this?.isDuplicate ?? false;
 
+  /// Returns `true` when the optional behavior refreshes the route.
   bool get isRefresh => this?.isRefresh ?? false;
 
+  /// Returns `true` when the optional behavior cancels navigation.
   bool get isDoNothing => this?.isDoNothing ?? false;
 }
 
+/// Convenience helpers for nullable [RouteArgs].
 extension RouteArgsX on RouteArgs? {
+  /// Returns `true` when the underlying route requires authorization.
   bool get requiresAuth => this?.route.mustBeAuthorized ?? false;
 }

@@ -126,7 +126,11 @@ class RouteInfo extends Equatable {
 
   /// Unique identifier for this route.
   final String name;
+
+  /// Whether this route should only be pushed on the root navigator.
   final bool isGlobalOnly;
+
+  /// Whether this route is used solely for redirections.
   final bool forRedirectionOnly;
 
   /// Whether this route can be accessed via deep links.
@@ -134,12 +138,26 @@ class RouteInfo extends Equatable {
 
   /// Whether authentication is required to access this route.
   final bool mustBeAuthorized;
+
+  /// Whether this route belongs to a navigation shell.
   final bool isBranch;
+
+  /// Whether primary navigation UI should remain visible on this route.
   final bool visibleNavBar;
+
+  /// Position of this branch within its shell, if [isBranch] is true.
   final int? branchIndex;
+
+  /// Unique navigator key identifier for branch routes.
   final String? branchKey;
+
+  /// Enum discriminator used to group branch routes.
   final Enum? branchParentType;
+
+  /// Whether this route is presented as a popup or dialog.
   final bool isPopupRoute;
+
+  /// Whether this route should stay at the top level of its navigator.
   final bool isTopLevelOnly;
 
   /// Localized title provider for this route.
@@ -151,14 +169,19 @@ class RouteInfo extends Equatable {
   /// locale changes during the app session. If omitted, the route has no title.
   final ScreenTitleBuilder? title;
 
+  /// Builds the widget for this route when navigation occurs.
   final ScreenWidgetBuilder? builder;
+
+  /// Static widget instance for routes that do not require a builder.
   final Widget? child;
+
+  /// Builds a custom [Page] for this route, enabling tailored transitions.
   final ScreenPageBuilder? pageBuilder;
+
+  /// Redirect handler for conditional navigation logic.
   final RouterRedirect? redirect;
 
-  /// The path for this route, used for deep linking and navigation.
-  /// default is '/$name' if not specified.
-  /// see [path].
+  /// Backing field for [path]; defaults to `/$name` when `null`.
   final String? _path;
 
   /// This route will replace all existing routes in the stack when navigated to.
@@ -173,14 +196,17 @@ class RouteInfo extends Equatable {
   /// The route's path segment. Defaults to '/$name' if not specified.
   String get path => _path ?? '/$name';
 
+  /// Builds a hierarchical name optionally scoped under [parentRoute].
   String generateName({RouteInfo? parentRoute}) {
     // Use dot notation for hierarchical names
     return parentRoute != null ? '${parentRoute.name}.$name' : name;
   }
 
+  /// Builds a hierarchical path optionally scoped under [parentRoute].
   String generatePath({RouteInfo? parentRoute}) =>
       parentRoute != null ? name : path;
 
+  /// Produces an inspection-friendly map describing this route.
   Map<String, Object?> report() => {
     '$name RouteInfo': {
       'name': name,
@@ -205,6 +231,7 @@ class RouteInfo extends Equatable {
     },
   };
 
+  /// Fields used by [Equatable] for equality checks.
   @override
   List<Object?> get props => [
     name,
