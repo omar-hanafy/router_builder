@@ -1,5 +1,8 @@
 # CHANGELOG
 
+## 1.1.2 - 2025-11-07
+- Renamed `replaceAll` to `shouldReplaceAll`.
+
 ## 1.1.1 - 2025-10-24
 - Documented all public APIs.
 

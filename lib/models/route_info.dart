@@ -44,7 +44,7 @@ class RouteInfo extends Equatable {
     this.visibleNavBar = true,
     this.redirect,
     this.isPopupRoute = false,
-    this.replaceAll = false,
+    this.shouldReplaceAll = false,
     this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
@@ -88,7 +88,7 @@ class RouteInfo extends Equatable {
        branchKey = null,
        branchParentType = null,
        isPopupRoute = false,
-       replaceAll = false;
+       shouldReplaceAll = false;
 
   /// Creates a route that belongs to a navigation shell (e.g., tab navigation).
   ///
@@ -106,7 +106,7 @@ class RouteInfo extends Equatable {
     this.deepLinkAllowed = true,
     this.mustBeAuthorized = true,
     this.visibleNavBar = true,
-    this.replaceAll = false,
+    this.shouldReplaceAll = false,
     this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
@@ -185,7 +185,7 @@ class RouteInfo extends Equatable {
   final String? _path;
 
   /// This route will replace all existing routes in the stack when navigated to.
-  final bool replaceAll;
+  final bool shouldReplaceAll;
 
   /// Alternative names for deep link matching.
   final List<String> deepLinkNames;
