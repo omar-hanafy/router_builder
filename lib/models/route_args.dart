@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:router_builder/models/route_info.dart';
+import 'package:router_builder/models/route_policy.dart';
+import 'package:router_builder/router_config.dart';
 
 /// Encapsulates arguments for navigation actions.
 ///
@@ -16,15 +18,14 @@ class RouteArgs extends Equatable {
     this.resumeTo,
     this.comingFrom,
     this.isFromDeeplink = false,
-    this.pushGlobally = false,
-    this.duplicateBehavior = DuplicateRouteBehavior.duplicate,
+    this.pushGlobally,
+    this.duplicateBehavior,
     this.isIdSlug = false,
+    this.mustBeAuthorized,
+    this.policy,
   });
 
   /// Build RouteArgs from a Uri and a RouteInfo with a path template.
-  /// - Extracts named path parameters from the template
-  /// - Uses 'id' param if present as [id]
-  /// - Copies query parameters
   factory RouteArgs.fromUri(RouteInfo route, Uri uri) {
     // Derive a template that has no leading '/'
     final template =
@@ -71,44 +72,89 @@ class RouteArgs extends Equatable {
   final String? id;
 
   /// Named path parameters extracted from the route's path template.
-  /// Example for template 'post/:postId/comment/:commentId':
-  /// { 'postId': '42', 'commentId': '7' }
   final Map<String, String>? pathParams;
 
   /// Whether this navigation originated from a deep link.
   final bool isFromDeeplink;
 
   /// How to handle navigation when the route already exists in the stack.
-  final DuplicateRouteBehavior duplicateBehavior;
+  final DuplicateRouteBehavior? duplicateBehavior;
 
   /// Whether the ID is a user-friendly slug vs numeric ID.
   final bool isIdSlug;
 
   /// Whether to use the root navigator instead of nested navigators.
-  final bool pushGlobally;
+  final bool? pushGlobally;
 
   /// Arbitrary data to pass to the route.
   final Object? object;
 
-  /// Optional resume intent to execute after this route completes
-  /// a prerequisite flow (e.g., authentication).
-  ///
-  /// Example: if a guard blocks navigation to a protected route, you can
-  /// navigate to the Auth route with `resumeTo` set to the original intent.
-  /// After successful login, the app can resume navigation using this.
+  /// Optional resume intent.
   final RouteArgs? resumeTo;
 
-  /// The originating route for this navigation, if applicable.
-  ///
-  /// Useful for analytics, conditional behavior, or back navigation logic
-  /// that depends on the previous route context.
+  /// The originating route for this navigation.
   final RouteArgs? comingFrom;
 
   /// Query parameters from the URI.
   final Map<String, String>? queryParams;
 
+  /// Authorization override for this navigation.
+  final bool? mustBeAuthorized;
+
+  /// Policy override for this navigation.
+  final RoutePolicy? policy;
+
+  // --------------------------------------------------------------------------
+  // EFFECTIVE POLICY RESOLUTION
+  // --------------------------------------------------------------------------
+
+  /// Resolves the effective authorization requirement.
+  ///
+  /// Precedence:
+  /// 1. Args [mustBeAuthorized]
+  /// 2. Args [policy]
+  /// 3. Route [mustBeAuthorized]
+  /// 4. Route [policy]
+  /// 5. Global defaults
+  bool get effectiveMustBeAuthorized {
+    return mustBeAuthorized ??
+        policy?.mustBeAuthorized ??
+        route.mustBeAuthorized ??
+        route.policy?.mustBeAuthorized ??
+        RouterBuilderConfig.defaults.mustBeAuthorized ??
+        true;
+  }
+
+  /// Resolves the effective duplicate behavior.
+  DuplicateRouteBehavior get effectiveDuplicateBehavior {
+    return duplicateBehavior ??
+        policy?.duplicateBehavior ??
+        route.duplicateBehavior ??
+        route.policy?.duplicateBehavior ??
+        RouterBuilderConfig.defaults.duplicateBehavior ??
+        DuplicateRouteBehavior.duplicate;
+  }
+
+  /// Resolves the effective global push setting.
+  bool get effectivePushGlobally {
+    return pushGlobally ??
+        policy?.pushGlobally ??
+        route.isGlobalOnly ??
+        route.policy?.pushGlobally ??
+        RouterBuilderConfig.defaults.pushGlobally ??
+        false;
+  }
+
+  /// Resolves the effective popup route setting.
+  bool get effectiveIsPopupRoute {
+    return policy?.isPopupRoute ??
+        route.isPopupRoute ??
+        route.policy?.isPopupRoute ??
+        RouterBuilderConfig.defaults.isPopupRoute ??
+        false;
+  }
+
   /// Create a copy with overridden fields.
-  /// Returns a new [RouteArgs] instance with the given overrides applied.
   RouteArgs copyWith({
     RouteInfo? route,
     String? id,
@@ -121,6 +167,8 @@ class RouteArgs extends Equatable {
     bool? pushGlobally,
     DuplicateRouteBehavior? duplicateBehavior,
     bool? isIdSlug,
+    bool? mustBeAuthorized,
+    RoutePolicy? policy,
   }) => RouteArgs(
     route ?? this.route,
     id: id ?? this.id,
@@ -133,6 +181,8 @@ class RouteArgs extends Equatable {
     pushGlobally: pushGlobally ?? this.pushGlobally,
     duplicateBehavior: duplicateBehavior ?? this.duplicateBehavior,
     isIdSlug: isIdSlug ?? this.isIdSlug,
+    mustBeAuthorized: mustBeAuthorized ?? this.mustBeAuthorized,
+    policy: policy ?? this.policy,
   );
 
   /// Returns a copy with navigation context preserved but flow metadata cleared.
@@ -146,9 +196,10 @@ class RouteArgs extends Equatable {
     pushGlobally: pushGlobally,
     duplicateBehavior: duplicateBehavior,
     isIdSlug: isIdSlug,
+    mustBeAuthorized: mustBeAuthorized,
+    policy: policy,
   );
 
-  /// Fields used by [Equatable] to compare instances.
   @override
   List<Object?> get props => [
     route,
@@ -162,44 +213,13 @@ class RouteArgs extends Equatable {
     pushGlobally,
     duplicateBehavior,
     isIdSlug,
+    mustBeAuthorized,
+    policy,
   ];
-}
-
-/// Defines behavior when navigating to a route already in the stack.
-enum DuplicateRouteBehavior {
-  /// Push a new instance of the route onto the stack.
-  duplicate,
-
-  /// Replace the current route with updated parameters instead of pushing a new instance.
-  refresh,
-
-  /// Cancel the navigation entirely.
-  doNothing;
-
-  /// Returns `true` when this behavior pushes a new instance.
-  bool get isDuplicate => this == duplicate;
-
-  /// Returns `true` when this behavior replaces the existing route.
-  bool get isRefresh => this == refresh;
-
-  /// Returns `true` when this behavior cancels navigation.
-  bool get isDoNothing => this == doNothing;
-}
-
-/// Convenient boolean checks for nullable [DuplicateRouteBehavior] instances.
-extension DuplicateRouteBehaviorEx on DuplicateRouteBehavior? {
-  /// Returns `true` when the optional behavior duplicates the route.
-  bool get isDuplicate => this?.isDuplicate ?? false;
-
-  /// Returns `true` when the optional behavior refreshes the route.
-  bool get isRefresh => this?.isRefresh ?? false;
-
-  /// Returns `true` when the optional behavior cancels navigation.
-  bool get isDoNothing => this?.isDoNothing ?? false;
 }
 
 /// Convenience helpers for nullable [RouteArgs].
 extension RouteArgsX on RouteArgs? {
   /// Returns `true` when the underlying route requires authorization.
-  bool get requiresAuth => this?.route.mustBeAuthorized ?? false;
+  bool get requiresAuth => this?.effectiveMustBeAuthorized ?? false;
 }

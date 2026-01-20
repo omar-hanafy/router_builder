@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## 1.2.0 - 2026-01-20
+
+### 🚀 Major Feature: Policy-Driven Routing
+
+This release introduces a robust, hierarchical configuration system for route behaviors, allowing precise control over authorization, duplication, and global navigation settings.
+
+#### Added
+- **RoutePolicy**: Centralized policy object for `mustBeAuthorized`, `duplicateBehavior`, `pushGlobally`, and `isPopupRoute`.
+- **Global Defaults**: New `RouterBuilderConfig` to set app-wide default policies.
+- **Duplicate Route Control**: Added `DuplicateRouteBehavior` to `RouteInfo` and `RouteArgs`.
+- **Precedence Logic**: `RouteArgs` now resolves policies in a clear order:
+  1. Args Override
+  2. Args Policy
+  3. Route Definition Override
+  4. Route Definition Policy
+  5. Global Defaults
+
+#### Updated
+- **RouteInfo**: Added `duplicateBehavior` and `policy` fields.
+- **RouteArgs**: Added override fields (`duplicateBehavior`, `mustBeAuthorized`, `policy`) and logic to compute effective values.
+- **Code Generator**: Updated to support `duplicateBehavior` in `@RT` annotations.
+
 ## 1.1.2 - 2025-11-07
 - Renamed `replaceAll` to `shouldReplaceAll`.
 
