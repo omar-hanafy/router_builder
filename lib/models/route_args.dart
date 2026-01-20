@@ -3,6 +3,8 @@ import 'package:router_builder/models/route_info.dart';
 import 'package:router_builder/models/route_policy.dart';
 import 'package:router_builder/router_config.dart';
 
+export 'route_policy.dart';
+
 /// Encapsulates arguments for navigation actions.
 ///
 /// RouteArgs combines the target route with navigation parameters
