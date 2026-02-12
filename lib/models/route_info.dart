@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 import 'package:router_builder/handlers/deep_link_handler.dart';
 import 'package:router_builder/models/route_args.dart';
+import 'package:router_builder/models/route_policy.dart';
 
 /// Builder function for creating a localized title for a route.
 typedef ScreenTitleBuilder =
@@ -38,16 +39,18 @@ class RouteInfo extends Equatable {
     this.builder,
     this.child,
     this.pageBuilder,
-    this.isGlobalOnly = false,
+    this.isGlobalOnly,
     this.deepLinkAllowed = true,
-    this.mustBeAuthorized = true,
+    this.mustBeAuthorized,
     this.visibleNavBar = true,
     this.redirect,
-    this.isPopupRoute = false,
+    this.isPopupRoute,
     this.shouldReplaceAll = false,
     this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
+    this.duplicateBehavior,
+    this.policy,
     String? path,
   }) : _path = path,
        isBranch = false,
@@ -70,13 +73,15 @@ class RouteInfo extends Equatable {
     this.name, {
     required this.redirect,
     this.title,
-    this.isGlobalOnly = false,
+    this.isGlobalOnly,
     this.deepLinkAllowed = true,
-    this.mustBeAuthorized = true,
+    this.mustBeAuthorized,
     this.visibleNavBar = true,
     this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
+    this.duplicateBehavior,
+    this.policy,
     String? path,
   }) : _path = path,
        forRedirectionOnly = true,
@@ -104,12 +109,14 @@ class RouteInfo extends Equatable {
     this.builder,
     this.pageBuilder,
     this.deepLinkAllowed = true,
-    this.mustBeAuthorized = true,
+    this.mustBeAuthorized,
     this.visibleNavBar = true,
     this.shouldReplaceAll = false,
     this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
+    this.duplicateBehavior,
+    this.policy,
     String? path,
   }) : _path = path,
        isBranch = true,
@@ -128,7 +135,7 @@ class RouteInfo extends Equatable {
   final String name;
 
   /// Whether this route should only be pushed on the root navigator.
-  final bool isGlobalOnly;
+  final bool? isGlobalOnly;
 
   /// Whether this route is used solely for redirections.
   final bool forRedirectionOnly;
@@ -137,7 +144,7 @@ class RouteInfo extends Equatable {
   final bool deepLinkAllowed;
 
   /// Whether authentication is required to access this route.
-  final bool mustBeAuthorized;
+  final bool? mustBeAuthorized;
 
   /// Whether this route belongs to a navigation shell.
   final bool isBranch;
@@ -155,7 +162,7 @@ class RouteInfo extends Equatable {
   final Enum? branchParentType;
 
   /// Whether this route is presented as a popup or dialog.
-  final bool isPopupRoute;
+  final bool? isPopupRoute;
 
   /// Whether this route should stay at the top level of its navigator.
   final bool isTopLevelOnly;
@@ -193,6 +200,12 @@ class RouteInfo extends Equatable {
   /// Handler for complex deep link logic beyond navigation.
   final DeepLinkHandler<dynamic>? deepLinkHandler;
 
+  /// Duplicate behavior override for this route.
+  final DuplicateRouteBehavior? duplicateBehavior;
+
+  /// Comprehensive policy for this route.
+  final RoutePolicy? policy;
+
   /// The route's path segment. Defaults to '/$name' if not specified.
   String get path => _path ?? '/$name';
 
@@ -228,6 +241,8 @@ class RouteInfo extends Equatable {
       'redirect': redirect,
       'deepLinkNames': deepLinkNames,
       'deepLinkHandler': deepLinkHandler,
+      'duplicateBehavior': duplicateBehavior,
+      'policy': policy,
     },
   };
 
@@ -245,5 +260,7 @@ class RouteInfo extends Equatable {
     path,
     isPopupRoute,
     isTopLevelOnly,
+    duplicateBehavior,
+    policy,
   ];
 }

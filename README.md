@@ -10,6 +10,7 @@ Router Builder simplifies Flutter route management and deep linking through code
 - ⚡ **Build-time Validation**: Detects route conflicts during generation
 - 🎯 **Simple API**: Clean, intuitive route definition syntax
 - 🏷️ **Localized Titles**: Optional `title` callback for per-route titles that react to locale changes
+- 👮 **Policy-Driven**: Flexible control over auth and duplication logic (Global -> Route -> Call)
 
 ## Getting Started
 
@@ -167,6 +168,63 @@ static const homeTab = RouteInfo.branch(
   isTopLevelOnly: true,
 );
 ```
+
+## Policy-Driven Routing
+
+Control route behavior globally, per-route, or per-navigation call using policies.
+
+### 1. Global Defaults
+
+Set default behaviors for your entire app (e.g., in your `main.dart`):
+
+```dart
+RouterBuilderConfig.setDefaults(
+  mustBeAuthorized: true, // Secure by default
+  duplicateBehavior: DuplicateRouteBehavior.duplicate, // Allow stacking by default
+  isPopupRoute: false,
+);
+```
+
+### 2. Route Definition Overrides
+
+Override policies for specific routes:
+
+```dart
+@RT()
+static const login = RouteInfo(
+  'login',
+  builder: ...,
+  mustBeAuthorized: false, // Public route
+  duplicateBehavior: DuplicateRouteBehavior.refresh, // Don't stack login screens
+);
+```
+
+### 3. Per-Call Overrides
+
+Override policies dynamically during navigation:
+
+```dart
+// Force a new instance even if the route usually refreshes
+RouteArgs(
+  MyRoutes.login,
+  duplicateBehavior: DuplicateRouteBehavior.duplicate,
+).go(context);
+
+// Bypass auth check for specific scenarios
+RouteArgs(
+  MyRoutes.debug,
+  mustBeAuthorized: false,
+).go(context);
+```
+
+### Policy Precedence
+
+The effective policy is resolved in this order:
+1. **RouteArgs Override**: passed during navigation.
+2. **RouteArgs Policy**: policy object passed during navigation.
+3. **Route Definition Override**: defined in `RouteInfo`.
+4. **Route Definition Policy**: policy object defined in `RouteInfo`.
+5. **Global Defaults**: set via `RouterBuilderConfig`.
 
 ## Migration Guide
 
