@@ -4,7 +4,6 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 import 'package:router_builder/handlers/deep_link_handler.dart';
 import 'package:router_builder/models/route_args.dart';
-import 'package:router_builder/models/route_policy.dart';
 
 /// Builder function for creating a localized title for a route.
 typedef ScreenTitleBuilder =
