@@ -1,4 +1,8 @@
 # CHANGELOG
+## 2.0.2
+
+- Updated all packages to the latest version and migrated to the latest analyzer and build runner.
+
 ## 2.0.1
 
 - Merged 1.2.0.
