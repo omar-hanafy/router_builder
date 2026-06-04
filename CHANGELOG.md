@@ -1,4 +1,8 @@
 # CHANGELOG
+## 2.0.3
+
+- Relaxed `analyzer` and `dart_style` constraints so consumers can resolve with analyzer 9 or analyzer 10.
+
 ## 2.0.2
 
 - Updated all packages to the latest version and migrated to the latest analyzer and build runner.
