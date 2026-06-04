@@ -1,4 +1,8 @@
 # CHANGELOG
+## 2.0.4
+
+- Relaxed `dart_helper_utils` constraint to allow compatible 6.x releases.
+
 ## 2.0.3
 
 - Relaxed `analyzer` and `dart_style` constraints so consumers can resolve with analyzer 9 or analyzer 10.
