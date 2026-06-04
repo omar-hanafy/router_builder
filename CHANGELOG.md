@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.3.0 - 2026-06-04
+
+Bump dart_helper_utils constraint to ^6.x
+
 ## 1.2.0 - 2026-01-20
 
 ### 🚀 Major Feature: Policy-Driven Routing
