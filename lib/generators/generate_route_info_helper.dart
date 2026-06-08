@@ -338,6 +338,8 @@ class GenerateRouteInfoHelperBuilder implements Builder {
           )
           ..writeln('// To update it, run:')
           ..writeln('//   flutter pub run build_runner build')
+          ..writeln()
+          ..writeln('// ignore_for_file: provider_dependencies')
           ..writeln();
 
     _writeImports(buffer, fields);
