@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
-import 'package:router_builder/handlers/deep_link_handler.dart';
-import 'package:router_builder/models/route_args.dart';
+import 'package:router_builder/src/handlers/deep_link_handler.dart';
+import 'package:router_builder/src/models/route_args.dart';
 
 /// Builder function for creating a localized title for a route.
 typedef ScreenTitleBuilder =
@@ -38,20 +38,28 @@ class RouteInfo extends Equatable {
     this.builder,
     this.child,
     this.pageBuilder,
-    this.isGlobalOnly,
+    @Deprecated('Use policy: RoutePolicy(pushGlobally: ...) instead.')
+    bool? isGlobalOnly,
     this.deepLinkAllowed = true,
-    this.mustBeAuthorized,
+    @Deprecated('Use policy: RoutePolicy(mustBeAuthorized: ...) instead.')
+    bool? mustBeAuthorized,
     this.visibleNavBar = true,
     this.redirect,
-    this.isPopupRoute,
+    @Deprecated('Use policy: RoutePolicy(isPopupRoute: ...) instead.')
+    bool? isPopupRoute,
     this.shouldReplaceAll = false,
     this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
-    this.duplicateBehavior,
+    @Deprecated('Use policy: RoutePolicy(duplicateBehavior: ...) instead.')
+    DuplicateRouteBehavior? duplicateBehavior,
     this.policy,
     String? path,
   }) : _path = path,
+       _isGlobalOnly = isGlobalOnly,
+       _mustBeAuthorized = mustBeAuthorized,
+       _isPopupRoute = isPopupRoute,
+       _duplicateBehavior = duplicateBehavior,
        isBranch = false,
        branchIndex = null,
        forRedirectionOnly = false,
@@ -72,17 +80,23 @@ class RouteInfo extends Equatable {
     this.name, {
     required this.redirect,
     this.title,
-    this.isGlobalOnly,
+    @Deprecated('Use policy: RoutePolicy(pushGlobally: ...) instead.')
+    bool? isGlobalOnly,
     this.deepLinkAllowed = true,
-    this.mustBeAuthorized,
+    @Deprecated('Use policy: RoutePolicy(mustBeAuthorized: ...) instead.')
+    bool? mustBeAuthorized,
     this.visibleNavBar = true,
     this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
-    this.duplicateBehavior,
+    @Deprecated('Use policy: RoutePolicy(duplicateBehavior: ...) instead.')
+    DuplicateRouteBehavior? duplicateBehavior,
     this.policy,
     String? path,
   }) : _path = path,
+       _isGlobalOnly = isGlobalOnly,
+       _mustBeAuthorized = mustBeAuthorized,
+       _duplicateBehavior = duplicateBehavior,
        forRedirectionOnly = true,
        child = null,
        builder = null,
@@ -91,7 +105,7 @@ class RouteInfo extends Equatable {
        branchIndex = null,
        branchKey = null,
        branchParentType = null,
-       isPopupRoute = false,
+       _isPopupRoute = null,
        shouldReplaceAll = false;
 
   /// Creates a route that belongs to a navigation shell (e.g., tab navigation).
@@ -108,21 +122,25 @@ class RouteInfo extends Equatable {
     this.builder,
     this.pageBuilder,
     this.deepLinkAllowed = true,
-    this.mustBeAuthorized,
+    @Deprecated('Use policy: RoutePolicy(mustBeAuthorized: ...) instead.')
+    bool? mustBeAuthorized,
     this.visibleNavBar = true,
     this.shouldReplaceAll = false,
     this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
-    this.duplicateBehavior,
+    @Deprecated('Use policy: RoutePolicy(duplicateBehavior: ...) instead.')
+    DuplicateRouteBehavior? duplicateBehavior,
     this.policy,
     String? path,
   }) : _path = path,
+       _isGlobalOnly = null,
+       _mustBeAuthorized = mustBeAuthorized,
+       _isPopupRoute = null,
+       _duplicateBehavior = duplicateBehavior,
        isBranch = true,
        redirect = null,
-       isGlobalOnly = false,
        forRedirectionOnly = false,
-       isPopupRoute = false,
        assert(
          (builder != null && child == null && pageBuilder == null) ||
              (builder == null && child != null && pageBuilder == null) ||
@@ -133,8 +151,11 @@ class RouteInfo extends Equatable {
   /// Unique identifier for this route.
   final String name;
 
+  final bool? _isGlobalOnly;
+
   /// Whether this route should only be pushed on the root navigator.
-  final bool? isGlobalOnly;
+  @Deprecated('Use policy.pushGlobally instead.')
+  bool? get isGlobalOnly => _legacyIsGlobalOnly;
 
   /// Whether this route is used solely for redirections.
   final bool forRedirectionOnly;
@@ -142,8 +163,11 @@ class RouteInfo extends Equatable {
   /// Whether this route can be accessed via deep links.
   final bool deepLinkAllowed;
 
+  final bool? _mustBeAuthorized;
+
   /// Whether authentication is required to access this route.
-  final bool? mustBeAuthorized;
+  @Deprecated('Use policy.mustBeAuthorized instead.')
+  bool? get mustBeAuthorized => _mustBeAuthorized;
 
   /// Whether this route belongs to a navigation shell.
   final bool isBranch;
@@ -160,8 +184,11 @@ class RouteInfo extends Equatable {
   /// Enum discriminator used to group branch routes.
   final Enum? branchParentType;
 
+  final bool? _isPopupRoute;
+
   /// Whether this route is presented as a popup or dialog.
-  final bool? isPopupRoute;
+  @Deprecated('Use policy.isPopupRoute instead.')
+  bool? get isPopupRoute => _legacyIsPopupRoute;
 
   /// Whether this route should stay at the top level of its navigator.
   final bool isTopLevelOnly;
@@ -199,11 +226,33 @@ class RouteInfo extends Equatable {
   /// Handler for complex deep link logic beyond navigation.
   final DeepLinkHandler<dynamic>? deepLinkHandler;
 
+  final DuplicateRouteBehavior? _duplicateBehavior;
+
   /// Duplicate behavior override for this route.
-  final DuplicateRouteBehavior? duplicateBehavior;
+  @Deprecated('Use policy.duplicateBehavior instead.')
+  DuplicateRouteBehavior? get duplicateBehavior => _duplicateBehavior;
 
   /// Comprehensive policy for this route.
   final RoutePolicy? policy;
+
+  /// Route-level policy with deprecated root overrides applied over [policy].
+  ///
+  /// This does not include navigation-call overrides or global defaults.
+  RoutePolicy get localPolicy => RoutePolicy(
+    mustBeAuthorized: _mustBeAuthorized ?? policy?.mustBeAuthorized,
+    duplicateBehavior: _duplicateBehavior ?? policy?.duplicateBehavior,
+    pushGlobally:
+        _isGlobalOnly ?? policy?.pushGlobally ?? (isBranch ? false : null),
+    isPopupRoute:
+        _isPopupRoute ??
+        policy?.isPopupRoute ??
+        (isBranch || forRedirectionOnly ? false : null),
+  );
+
+  bool? get _legacyIsGlobalOnly => _isGlobalOnly ?? (isBranch ? false : null);
+
+  bool? get _legacyIsPopupRoute =>
+      _isPopupRoute ?? (isBranch || forRedirectionOnly ? false : null);
 
   /// The route's path segment. Defaults to '/$name' if not specified.
   String get path => _path ?? '/$name';
@@ -223,16 +272,16 @@ class RouteInfo extends Equatable {
     '$name RouteInfo': {
       'name': name,
       'path': path,
-      'isGlobalOnly': isGlobalOnly,
+      'isGlobalOnly': _legacyIsGlobalOnly,
       'forRedirectionOnly': forRedirectionOnly,
       'deepLinkAllowed': deepLinkAllowed,
-      'mustBeAuthorized': mustBeAuthorized,
+      'mustBeAuthorized': _mustBeAuthorized,
       'isBranch': isBranch,
       'visibleNavBar': visibleNavBar,
       'branchIndex': branchIndex,
       'branchKey': branchKey,
       'isTopLevelOnly': isTopLevelOnly,
-      'isPopupRoute': isPopupRoute,
+      'isPopupRoute': _legacyIsPopupRoute,
       'title': title,
       'builder': builder,
       'child': child,
@@ -240,7 +289,7 @@ class RouteInfo extends Equatable {
       'redirect': redirect,
       'deepLinkNames': deepLinkNames,
       'deepLinkHandler': deepLinkHandler,
-      'duplicateBehavior': duplicateBehavior,
+      'duplicateBehavior': _duplicateBehavior,
       'policy': policy,
     },
   };
@@ -249,17 +298,17 @@ class RouteInfo extends Equatable {
   @override
   List<Object?> get props => [
     name,
-    isGlobalOnly,
+    _legacyIsGlobalOnly,
     forRedirectionOnly,
     deepLinkAllowed,
-    mustBeAuthorized,
+    _mustBeAuthorized,
     isBranch,
     branchIndex,
     branchKey,
     path,
-    isPopupRoute,
+    _legacyIsPopupRoute,
     isTopLevelOnly,
-    duplicateBehavior,
+    _duplicateBehavior,
     policy,
   ];
 }

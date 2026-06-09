@@ -1,4 +1,11 @@
 # CHANGELOG
+## 2.1.0
+
+- Deprecated root-level policy override fields in favor of `RoutePolicy`.
+- Added route and navigation `localPolicy` helpers to preserve compatibility precedence without relying on deprecated fields internally.
+- Updated generated route metadata extraction to understand inline `RoutePolicy(...)` values for authorization, global push, and popup route categories.
+- Fixed generated helper output so `provider_dependencies` is ignored on a valid file-level ignore line.
+
 ## 2.0.4
 
 - Relaxed `dart_helper_utils` constraint to allow compatible 6.x releases.

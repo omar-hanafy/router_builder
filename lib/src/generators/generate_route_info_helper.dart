@@ -198,8 +198,16 @@ class GenerateRouteInfoHelperBuilder implements Builder {
       }
     }
 
-    for (final arg in args) {
-      if (arg is NamedExpression) {
+    final namedArgs = args.whereType<NamedExpression>().toList();
+
+    for (final arg in namedArgs) {
+      if (arg.name.label.name == 'policy') {
+        _processNamedArgument(data, arg);
+      }
+    }
+
+    for (final arg in namedArgs) {
+      if (arg.name.label.name != 'policy') {
         _processNamedArgument(data, arg);
       }
     }
@@ -282,6 +290,36 @@ class GenerateRouteInfoHelperBuilder implements Builder {
       case 'deepLinkHandler':
         // Just mark that it has a handler, we can't serialize the instance
         data['hasDeepLinkHandler'] = true;
+      case 'policy':
+        _processPolicyArgument(data, expression);
+    }
+  }
+
+  /// Applies inline `RoutePolicy(...)` values to generated route metadata.
+  void _processPolicyArgument(Map<String, Object?> data, Expression policy) {
+    if (policy is! InstanceCreationExpression) {
+      return;
+    }
+
+    for (final arg
+        in policy.argumentList.arguments.whereType<NamedExpression>()) {
+      final name = arg.name.label.name;
+      final expression = arg.expression;
+
+      switch (name) {
+        case 'mustBeAuthorized':
+          if (expression is BooleanLiteral) {
+            data['mustBeAuthorized'] = expression.value;
+          }
+        case 'pushGlobally':
+          if (expression is BooleanLiteral) {
+            data['isGlobalOnly'] = expression.value;
+          }
+        case 'isPopupRoute':
+          if (expression is BooleanLiteral) {
+            data['isPopupRoute'] = expression.value;
+          }
+      }
     }
   }
 
@@ -350,12 +388,11 @@ class GenerateRouteInfoHelperBuilder implements Builder {
 
   /// Writes import statements to the buffer.
   void _writeImports(StringBuffer buffer, List<Map<String, Object?>> fields) {
-    final importUris =
-        fields.map((f) => f.getString('importUri')).toSet()..addAll([
-          'package:dart_helper_utils/dart_helper_utils.dart',
-          'package:router_builder/router_builder.dart',
-          'package:router_builder/deeplink/deep_link_matcher.dart',
-        ]);
+    final importUris = fields.map((f) => f.getString('importUri')).toSet()
+      ..addAll([
+        'package:dart_helper_utils/dart_helper_utils.dart',
+        'package:router_builder/router_builder.dart',
+      ]);
 
     for (final field in fields) {
       final bpImport = field['branchParentType_import'];

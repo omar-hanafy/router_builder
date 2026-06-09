@@ -1,13 +1,12 @@
-/// Public package entry point that re-exports the router builder toolchain.
-///
-/// Import this library to access annotations, models, deep link helpers, and
-/// handlers required to define routes and generate supporting code.
+/// Public entry point for router_builder: annotations, models, config, the
+/// deep-link layer, and handlers. Import this library to define routes and use
+/// the generated helper. The code generator lives in `builder.dart`.
 library;
 
-export 'annotations/route.dart';
-export 'deeplink/deep_link_matcher.dart';
-export 'handlers/deep_link_handler.dart';
-export 'models/route_args.dart';
-export 'models/route_info.dart';
-export 'models/route_policy.dart';
-export 'router_config.dart';
+export 'src/annotations/route.dart';
+export 'src/deeplink/deep_link_matcher.dart';
+export 'src/handlers/deep_link_handler.dart';
+export 'src/models/route_args.dart';
+export 'src/models/route_info.dart';
+export 'src/models/route_policy.dart';
+export 'src/router_config.dart';

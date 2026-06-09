@@ -194,8 +194,10 @@ Override policies for specific routes:
 static const login = RouteInfo(
   'login',
   builder: ...,
-  mustBeAuthorized: false, // Public route
-  duplicateBehavior: DuplicateRouteBehavior.refresh, // Don't stack login screens
+  policy: RoutePolicy(
+    mustBeAuthorized: false, // Public route
+    duplicateBehavior: DuplicateRouteBehavior.refresh, // Don't stack login screens
+  ),
 );
 ```
 
@@ -207,22 +209,40 @@ Override policies dynamically during navigation:
 // Force a new instance even if the route usually refreshes
 RouteArgs(
   MyRoutes.login,
-  duplicateBehavior: DuplicateRouteBehavior.duplicate,
+  policy: const RoutePolicy(
+    duplicateBehavior: DuplicateRouteBehavior.duplicate,
+  ),
 ).go(context);
 
 // Bypass auth check for specific scenarios
 RouteArgs(
   MyRoutes.debug,
-  mustBeAuthorized: false,
+  policy: const RoutePolicy(mustBeAuthorized: false),
 ).go(context);
 ```
+
+### Deprecated Root Overrides
+
+The legacy root override fields remain available for compatibility, but are
+deprecated. Prefer `policy: RoutePolicy(...)` for new code.
+
+Deprecated route-level fields:
+- `RouteInfo.mustBeAuthorized`
+- `RouteInfo.isGlobalOnly`
+- `RouteInfo.isPopupRoute`
+- `RouteInfo.duplicateBehavior`
+
+Deprecated call-level fields:
+- `RouteArgs.mustBeAuthorized`
+- `RouteArgs.pushGlobally`
+- `RouteArgs.duplicateBehavior`
 
 ### Policy Precedence
 
 The effective policy is resolved in this order:
-1. **RouteArgs Override**: passed during navigation.
+1. **RouteArgs Root Override**: deprecated compatibility fields passed during navigation.
 2. **RouteArgs Policy**: policy object passed during navigation.
-3. **Route Definition Override**: defined in `RouteInfo`.
+3. **Route Definition Root Override**: deprecated compatibility fields defined in `RouteInfo`.
 4. **Route Definition Policy**: policy object defined in `RouteInfo`.
 5. **Global Defaults**: set via `RouterBuilderConfig`.
 

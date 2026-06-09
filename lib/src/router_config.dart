@@ -1,4 +1,4 @@
-import 'package:router_builder/models/route_policy.dart';
+import 'package:router_builder/src/models/route_policy.dart';
 
 /// Configuration for the router builder package.
 ///
