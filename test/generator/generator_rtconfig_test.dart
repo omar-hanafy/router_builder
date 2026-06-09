@@ -1,3 +1,6 @@
+@Tags(['generator'])
+library;
+
 import 'package:build_test/build_test.dart';
 import 'package:test/test.dart';
 

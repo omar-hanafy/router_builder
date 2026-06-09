@@ -58,7 +58,7 @@ void main() {
     test('cleared drops resumeTo/comingFrom but keeps nav context', () {
       const route = RouteInfo('p', child: SizedBox());
       const prev = RouteArgs(route);
-      final args = RouteArgs(route, id: '1', resumeTo: prev, comingFrom: prev);
+      const args = RouteArgs(route, id: '1', resumeTo: prev, comingFrom: prev);
       final cleared = args.cleared();
       expect(cleared.id, '1');
       expect(cleared.resumeTo, isNull);
@@ -69,7 +69,7 @@ void main() {
   group('RouteArgs subclassing', () {
     test('forwards policy via super-params and resolves', () {
       const route = RouteInfo('dlg', child: SizedBox());
-      final args = _DialogArgs(route, policy: RoutePolicy.popup);
+      const args = _DialogArgs(route, policy: RoutePolicy.popup);
       expect(args.effectiveIsPopupRoute, isTrue);
     });
   });
@@ -98,7 +98,7 @@ void main() {
 enum _Shell { market }
 
 class _DialogArgs extends RouteArgs {
-  const _DialogArgs(super.route, {super.policy, super.id});
+  const _DialogArgs(super.route, {super.policy});
 }
 
 class _NotEncodable {}

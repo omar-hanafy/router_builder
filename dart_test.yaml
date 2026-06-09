@@ -1,0 +1,5 @@
+tags:
+  generator:
+    # Generator tests use build_test + Isolate.packageConfig.
+    # Run them with: dart test --tags generator
+    # They are excluded from `flutter test` via: flutter test --exclude-tags generator
