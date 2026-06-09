@@ -39,9 +39,10 @@ class RouteArgs extends Equatable {
           .where((s) => s.isNotEmpty)
           .toList(growable: false);
       final params = <String, String>{};
-      final len = uriSegments.length < templateSegments.length
-          ? uriSegments.length
-          : templateSegments.length;
+      final len =
+          uriSegments.length < templateSegments.length
+              ? uriSegments.length
+              : templateSegments.length;
       for (var i = 0; i < len; i++) {
         final t = templateSegments[i];
         final u = uriSegments[i];
@@ -177,12 +178,14 @@ class RouteArgs extends Equatable {
     'queryParams': queryParams,
     'object': object,
     'isFromDeeplink': isFromDeeplink,
-    'resumeTo': resumeTo == null
-        ? null
-        : {'name': resumeTo!.route.name, 'id': resumeTo!.id},
-    'comingFrom': comingFrom == null
-        ? null
-        : {'name': comingFrom!.route.name, 'id': comingFrom!.id},
+    'resumeTo':
+        resumeTo == null
+            ? null
+            : {'name': resumeTo!.route.name, 'id': resumeTo!.id},
+    'comingFrom':
+        comingFrom == null
+            ? null
+            : {'name': comingFrom!.route.name, 'id': comingFrom!.id},
     'effectivePolicy': effectivePolicy.toMap(),
   };
 

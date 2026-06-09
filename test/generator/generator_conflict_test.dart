@@ -45,8 +45,9 @@ void main() {
       readerWriter: await reader(),
       onLog: (_) {},
       outputs: {
-        'router_builder|lib/routes.g.dart':
-            decodedMatches(contains('deepLinkMap')),
+        'router_builder|lib/routes.g.dart': decodedMatches(
+          contains('deepLinkMap'),
+        ),
       },
     );
   });

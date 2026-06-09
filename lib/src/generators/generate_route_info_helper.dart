@@ -117,7 +117,9 @@ class GenerateRouteInfoHelperBuilder implements Builder {
           );
         }
         if (_hasAnnotation(field, 'RTConfig')) {
-          out.configs.add(_configRef('$className.$fieldName', importUri, field));
+          out.configs.add(
+            _configRef('$className.$fieldName', importUri, field),
+          );
         }
       }
     }
@@ -180,14 +182,13 @@ class GenerateRouteInfoHelperBuilder implements Builder {
       element.firstFragment,
       resolve: true,
     );
-    final init = (node is VariableDeclaration)
-        ? node.initializer
-        : null;
+    final init = (node is VariableDeclaration) ? node.initializer : null;
     final creation = init is InstanceCreationExpression ? init : null;
     final ctorName = creation?.constructorName.name?.name;
-    final kind = ctorName == 'branch'
-        ? 'branch'
-        : ctorName == 'redirect'
+    final kind =
+        ctorName == 'branch'
+            ? 'branch'
+            : ctorName == 'redirect'
             ? 'redirect'
             : 'standard';
 
@@ -196,18 +197,22 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     final data = <String, Object?>{
       'ref': ref,
       'importUri': importUri.toString(),
-      'routeName': value?.getField('name')?.toStringValue() ??
+      'routeName':
+          value?.getField('name')?.toStringValue() ??
           _positionalString(creation),
-      'path': value?.getField('_path')?.toStringValue() ??
+      'path':
+          value?.getField('_path')?.toStringValue() ??
           _namedString(creation, 'path'),
       'deepLinkNames': _stringList(value, 'deepLinkNames', creation),
       'kind': kind,
       'branchParentType': null,
       'branchParentType_type': null,
       'branchParentType_import': null,
-      'branchIndex': value?.getField('branchIndex')?.toIntValue() ??
+      'branchIndex':
+          value?.getField('branchIndex')?.toIntValue() ??
           _namedInt(creation, 'branchIndex'),
-      'branchKey': value?.getField('branchKey')?.toStringValue() ??
+      'branchKey':
+          value?.getField('branchKey')?.toStringValue() ??
           _namedString(creation, 'branchKey'),
       'isConst': element.isConst,
     };
@@ -274,12 +279,13 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     String field,
     InstanceCreationExpression? creation,
   ) {
-    final fromConst = value
-        ?.getField(field)
-        ?.toListValue()
-        ?.map((e) => e.toStringValue())
-        .whereType<String>()
-        .toList();
+    final fromConst =
+        value
+            ?.getField(field)
+            ?.toListValue()
+            ?.map((e) => e.toStringValue())
+            .whereType<String>()
+            .toList();
     if (fromConst != null) return fromConst;
     final expr = _namedExpr(creation, field);
     if (expr is ListLiteral) {
@@ -306,13 +312,14 @@ class GenerateRouteInfoHelperBuilder implements Builder {
 
   String _generateCode(_Collected collected) {
     final routes = collected.routes;
-    final buffer = StringBuffer()
-      ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND.')
-      ..writeln('//')
-      ..writeln('// Run: dart run build_runner build')
-      ..writeln()
-      ..writeln('// ignore_for_file: type=lint')
-      ..writeln();
+    final buffer =
+        StringBuffer()
+          ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND.')
+          ..writeln('//')
+          ..writeln('// Run: dart run build_runner build')
+          ..writeln()
+          ..writeln('// ignore_for_file: type=lint')
+          ..writeln();
     _writeImports(buffer, collected);
     _writeRoutesClass(buffer, routes);
     _writeHelperClass(buffer, collected);
@@ -338,7 +345,10 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     buffer.writeln();
   }
 
-  void _writeRoutesClass(StringBuffer buffer, List<Map<String, Object?>> routes) {
+  void _writeRoutesClass(
+    StringBuffer buffer,
+    List<Map<String, Object?>> routes,
+  ) {
     buffer
       ..writeln('/// Static constants for every defined route.')
       ..writeln('abstract class $routeClassName {');
@@ -378,8 +388,7 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     if (branches.isEmpty) return 'Enum';
     final first = branches.first['branchParentType_type'] as String?;
     if (first == null) return 'Enum';
-    final allSame =
-        branches.every((b) => b['branchParentType_type'] == first);
+    final allSame = branches.every((b) => b['branchParentType_type'] == first);
     if (!allSame) {
       throw RouterBuilderError(
         'All branch routes must share a single branchParentType enum type.',
@@ -398,15 +407,17 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     }
     for (final g in grouped.values) {
       g.sort(
-        (a, b) => ((a['branchIndex'] as int?) ?? 0)
-            .compareTo((b['branchIndex'] as int?) ?? 0),
+        (a, b) => ((a['branchIndex'] as int?) ?? 0).compareTo(
+          (b['branchIndex'] as int?) ?? 0,
+        ),
       );
     }
-    final buffer = StringBuffer()
-      ..writeln('  /// Branch routes grouped by shell enum value.')
-      ..writeln(
-        '  static final Map<$enumType, Map<int?, RouteInfo>> branches = {',
-      );
+    final buffer =
+        StringBuffer()
+          ..writeln('  /// Branch routes grouped by shell enum value.')
+          ..writeln(
+            '  static final Map<$enumType, Map<int?, RouteInfo>> branches = {',
+          );
     grouped.forEach((parent, list) {
       buffer.writeln('    $parent: {');
       for (final f in list) {
@@ -429,8 +440,9 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     }
     for (final g in grouped.values) {
       g.sort(
-        (a, b) => ((a['branchIndex'] as int?) ?? 0)
-            .compareTo((b['branchIndex'] as int?) ?? 0),
+        (a, b) => ((a['branchIndex'] as int?) ?? 0).compareTo(
+          (b['branchIndex'] as int?) ?? 0,
+        ),
       );
     }
     final buffer = StringBuffer();
@@ -531,11 +543,12 @@ $nonBranch
       }
       log.warning('Deep-link key conflict(s) (keeping first):\n$detail');
     }
-    final buffer = StringBuffer()
-      ..writeln(
-        '  /// Lookup by deep-link key (route name, first path segment, alias).',
-      )
-      ..writeln('  static final Map<String, RouteInfo> deepLinkMap = {');
+    final buffer =
+        StringBuffer()
+          ..writeln(
+            '  /// Lookup by deep-link key (route name, first path segment, alias).',
+          )
+          ..writeln('  static final Map<String, RouteInfo> deepLinkMap = {');
     for (final key in map.keys.toList()..sort()) {
       buffer.writeln("    '$key': ${map[key]},");
     }
@@ -570,8 +583,9 @@ $nonBranch
 ''';
 
   String _generateBranchHelpers(List<Map<String, Object?>> routes) {
-    final enumType =
-        _branchEnumType(routes.where((r) => r['kind'] == 'branch').toList());
+    final enumType = _branchEnumType(
+      routes.where((r) => r['kind'] == 'branch').toList(),
+    );
     return '''
   /// Branch routes for [shell], or null.
   static Map<int?, RouteInfo>? branchesFor($enumType shell) => branches[shell];

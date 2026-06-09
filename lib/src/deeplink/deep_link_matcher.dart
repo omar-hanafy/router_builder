@@ -32,8 +32,9 @@ class DeepLinkMatcher {
       return incoming;
     }
 
-    final lowerHosts =
-        hosts.map((host) => host.toLowerCase()).toList(growable: false);
+    final lowerHosts = hosts
+        .map((host) => host.toLowerCase())
+        .toList(growable: false);
     final scheme = incoming.scheme.toLowerCase();
     final host = incoming.host.toLowerCase();
     final params =

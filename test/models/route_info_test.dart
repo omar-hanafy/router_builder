@@ -30,7 +30,9 @@ void main() {
     });
 
     test('installed global defaults reflect in resolved getters', () {
-      RouterBuilderConfig.setDefaults(const RoutePolicy(mustBeAuthorized: false));
+      RouterBuilderConfig.setDefaults(
+        const RoutePolicy(mustBeAuthorized: false),
+      );
       const r = RouteInfo('home', child: SizedBox());
       expect(r.mustBeAuthorized, isFalse);
     });
@@ -64,13 +66,16 @@ void main() {
       expect(() => branch.resolvedPolicy, throwsA(isA<AssertionError>()));
     });
 
-    test('redirect forces isPopupRoute/visibleNavBar/shouldReplaceAll false', () {
-      const redirect = RouteInfo.redirect('gate', redirect: _noRedirect);
-      final resolved = redirect.resolvedPolicy;
-      expect(resolved.isPopupRoute, isFalse);
-      expect(resolved.visibleNavBar, isFalse);
-      expect(resolved.shouldReplaceAll, isFalse);
-    });
+    test(
+      'redirect forces isPopupRoute/visibleNavBar/shouldReplaceAll false',
+      () {
+        const redirect = RouteInfo.redirect('gate', redirect: _noRedirect);
+        final resolved = redirect.resolvedPolicy;
+        expect(resolved.isPopupRoute, isFalse);
+        expect(resolved.visibleNavBar, isFalse);
+        expect(resolved.shouldReplaceAll, isFalse);
+      },
+    );
   });
 
   group('RouteInfo equality', () {

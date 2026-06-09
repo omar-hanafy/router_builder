@@ -15,8 +15,10 @@ void main() {
       readerWriter: await reader(),
       outputs: {
         'router_builder|lib/routes.g.dart': decodedMatches(
-          allOf(contains('abstract class Routes'),
-              contains('abstract class RoutesHelper')),
+          allOf(
+            contains('abstract class Routes'),
+            contains('abstract class RoutesHelper'),
+          ),
         ),
       },
     );
@@ -34,8 +36,10 @@ void main() {
       readerWriter: await reader(),
       outputs: {
         'router_builder|lib/nav.g.dart': decodedMatches(
-          allOf(contains('abstract class AppRoute'),
-              contains('abstract class NavHelper')),
+          allOf(
+            contains('abstract class AppRoute'),
+            contains('abstract class NavHelper'),
+          ),
         ),
       },
     );

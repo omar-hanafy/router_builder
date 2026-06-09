@@ -75,15 +75,20 @@ void main() {
   });
 
   group('RouteArgs.report', () {
-    test('is JSON encodable with effective policy and shallow route summary', () {
-      const route = RouteInfo('p', child: SizedBox());
-      final args = RouteArgs(route, id: '7', object: _NotEncodable());
-      final map = args.report(toEncodable: (v) => v is _NotEncodable ? 'X' : v);
-      expect(() => jsonEncode(map), returnsNormally);
-      expect((map['route'] as Map)['name'], 'p');
-      expect(map['object'], 'X');
-      expect((map['effectivePolicy'] as Map)['mustBeAuthorized'], isTrue);
-    });
+    test(
+      'is JSON encodable with effective policy and shallow route summary',
+      () {
+        const route = RouteInfo('p', child: SizedBox());
+        final args = RouteArgs(route, id: '7', object: _NotEncodable());
+        final map = args.report(
+          toEncodable: (v) => v is _NotEncodable ? 'X' : v,
+        );
+        expect(() => jsonEncode(map), returnsNormally);
+        expect((map['route'] as Map)['name'], 'p');
+        expect(map['object'], 'X');
+        expect((map['effectivePolicy'] as Map)['mustBeAuthorized'], isTrue);
+      },
+    );
   });
 
   test('RouteArgsX.requiresAuth', () {

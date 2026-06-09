@@ -118,8 +118,7 @@ class RoutePolicy extends Equatable {
   Map<String, dynamic> report({
     JsonOptions options = const JsonOptions(),
     Object? Function(dynamic)? toEncodable,
-  }) =>
-      toMap().toJsonMap(options: options, toEncodable: toEncodable);
+  }) => toMap().toJsonMap(options: options, toEncodable: toEncodable);
 
   @override
   List<Object?> get props => [

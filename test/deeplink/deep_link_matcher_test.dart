@@ -39,8 +39,9 @@ void main() {
   group('match', () {
     test('resolves a template route and applies deepLinkPushGlobally', () {
       const route = RouteInfo('user', path: '/users/:id', child: SizedBox());
-      final match =
-          const DeepLinkMatcher().match(Uri.parse('/users/7'), const [route]);
+      final match = const DeepLinkMatcher().match(Uri.parse('/users/7'), const [
+        route,
+      ]);
       expect(match, isNotNull);
       expect(match!.args.id, '7');
       expect(match.args.effectivePushGlobally, isTrue);
@@ -51,15 +52,17 @@ void main() {
         const RoutePolicy(deepLinkAllowed: false),
       );
       const route = RouteInfo('user', path: '/users/:id', child: SizedBox());
-      final match =
-          const DeepLinkMatcher().match(Uri.parse('/users/7'), const [route]);
+      final match = const DeepLinkMatcher().match(Uri.parse('/users/7'), const [
+        route,
+      ]);
       expect(match, isNull);
     });
 
     test('resolves redirect-only routes', () {
       const redirect = RouteInfo.redirect('gate', redirect: _to, path: '/gate');
-      final match =
-          const DeepLinkMatcher().match(Uri.parse('/gate'), const [redirect]);
+      final match = const DeepLinkMatcher().match(Uri.parse('/gate'), const [
+        redirect,
+      ]);
       expect(match, isNotNull);
       expect(match!.route.name, 'gate');
     });
