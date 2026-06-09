@@ -1,953 +1,624 @@
-import 'dart:async';
-
-// External package imports
-import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/constant/value.dart';
+import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:build/build.dart';
 import 'package:dart_helper_utils/dart_helper_utils.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:glob/glob.dart';
 
-/// A [Builder] that generates a `route_info_helper.dart` file containing route
-/// information for fields annotated with `RT`.
-///
-/// This builder scans all Dart files under `lib/`, identifies static public fields
-/// annotated with `RT`, extracts their route data (e.g., name, branch type),
-/// and generates a helper file with utilities for accessing routes. The output
-/// file, located at `lib/route_info_helper.dart`, includes the [RouteInfoHelper]
-/// and [MyRoutes] classes for use in routing logic.
-///
-/// Intended for use in a `build.yaml` configuration, for example:
-/// ```yaml
-/// builders:
-///   route_info_helper:
-///     import: "package:my_package/builder.dart"
-///     builder_factories: ["generateRouteInfoHelperBuilder"]
-///     build_extensions: { "$package$": ["lib/route_info_helper.dart"] }
-///     auto_apply: root_package
-///     build_to: source
-/// ```
-class GenerateRouteInfoHelperBuilder implements Builder {
+/// Error thrown by the builder for unrecoverable generation problems
+/// (deep-link key conflicts, invalid or duplicate `@RTConfig`).
+class RouterBuilderError extends Error {
+  /// Creates a builder error with a human-readable [message].
+  RouterBuilderError(this.message);
+
+  /// The failure description shown in build output.
+  final String message;
+
   @override
-  final buildExtensions = const {
-    r'$package$': ['lib/route_info_helper.dart'],
+  String toString() => 'RouterBuilderError: $message';
+}
+
+/// Mutable accumulator passed through library scanning.
+class _Collected {
+  final List<Map<String, Object?>> routes = [];
+  final List<Map<String, Object?>> configs = [];
+}
+
+/// Factory referenced by `build.yaml`; reads [BuilderOptions].
+Builder generateRouteInfoHelperBuilder(BuilderOptions options) {
+  final c = options.config;
+  return GenerateRouteInfoHelperBuilder(
+    output: (c['output'] as String?) ?? 'lib/routes.g.dart',
+    routeClassName: (c['route_class_name'] as String?) ?? 'Routes',
+    helperClassName: (c['helper_class_name'] as String?) ?? 'RoutesHelper',
+    failOnConflict: (c['fail_on_conflict'] as bool?) ?? true,
+  );
+}
+
+/// Aggregating [Builder] that scans `lib/` for `@RT` routes and `@RTConfig`,
+/// then emits a single helper file of statically-true route data plus
+/// runtime-derived category getters.
+class GenerateRouteInfoHelperBuilder implements Builder {
+  /// Creates the builder. All parameters come from [BuilderOptions].
+  GenerateRouteInfoHelperBuilder({
+    this.output = 'lib/routes.g.dart',
+    this.routeClassName = 'Routes',
+    this.helperClassName = 'RoutesHelper',
+    this.failOnConflict = true,
+  });
+
+  /// Output asset path, relative to the package root.
+  final String output;
+
+  /// Name of the generated route-constants class.
+  final String routeClassName;
+
+  /// Name of the generated helper class.
+  final String helperClassName;
+
+  /// Whether a deep-link key conflict fails the build.
+  final bool failOnConflict;
+
+  @override
+  Map<String, List<String>> get buildExtensions => {
+    r'$package$': [output],
   };
 
   @override
   Future<void> build(BuildStep buildStep) async {
-    log.info('Starting GenerateRouteInfoHelperBuilder...');
-
-    // Gather annotated route fields across the project.
-    final annotatedFields = await _collectAnnotatedFields(buildStep);
-
-    // Format the generated Dart code and write it out.
-    final formattedCode = _formatGeneratedCode(annotatedFields);
-    await _writeOutputFile(buildStep, formattedCode);
-
-    log.info('Successfully wrote route_info_helper.dart!');
-  }
-
-  // --------------------------------------------------------------------------
-  // ANNOTATION DISCOVERY
-  // --------------------------------------------------------------------------
-
-  /// Collects all fields annotated with `RT` across the project and returns a list
-  /// of maps containing route data.
-  Future<List<Map<String, Object?>>> _collectAnnotatedFields(
-    BuildStep buildStep,
-  ) async {
-    final annotatedFields = <Map<String, Object?>>[];
-
-    // Search within all Dart files under 'lib'.
+    final collected = _Collected();
     final dartFiles = await buildStep.findAssets(Glob('lib/**.dart')).toList();
-    for (final inputId in dartFiles) {
-      if (await buildStep.resolver.isLibrary(inputId)) {
-        final library = await buildStep.resolver.libraryFor(inputId);
-        final fieldsFromThisLibrary = await _processLibrary(library, buildStep);
-        annotatedFields.addAll(fieldsFromThisLibrary);
-      } else {
-        log.info('Skipping non-library file: ${inputId.path}');
+    for (final id in dartFiles) {
+      if (await buildStep.resolver.isLibrary(id)) {
+        final library = await buildStep.resolver.libraryFor(id);
+        await _processLibrary(library, buildStep, collected);
       }
     }
 
-    return annotatedFields;
+    if (collected.configs.length > 1) {
+      final refs = collected.configs.map((c) => c['ref']).join(', ');
+      throw RouterBuilderError(
+        'Found ${collected.configs.length} @RTConfig declarations ($refs). '
+        'Exactly one is allowed.',
+      );
+    }
+
+    final code = _formatGeneratedCode(collected);
+    final outputId = AssetId(buildStep.inputId.package, output);
+    await buildStep.writeAsString(outputId, code);
   }
 
-  /// Processes a single library to find classes and their static public fields
-  /// annotated with `RT`, and returns a list of route data maps.
-  Future<List<Map<String, Object?>>> _processLibrary(
+  // -------------------------------------------------------------------------
+  // DISCOVERY
+  // -------------------------------------------------------------------------
+
+  Future<void> _processLibrary(
     LibraryElement library,
     BuildStep buildStep,
+    _Collected out,
   ) async {
-    final annotatedFields = <Map<String, Object?>>[];
+    final importUri = (await buildStep.resolver.assetIdForElement(library)).uri;
 
-    for (final classElement in library.classes) {
-      for (final field in classElement.fields) {
-        if (field.isStatic && field.isPublic) {
-          final routeAnnotation = _getRouteAnnotation(field);
-          if (routeAnnotation != null) {
-            final routeData = await _extractRouteData(
+    for (final cls in library.classes) {
+      final className = cls.name;
+      if (className == null) continue;
+      for (final field in cls.fields) {
+        if (!field.isStatic || !field.isPublic) continue;
+        final fieldName = field.name;
+        if (fieldName == null) continue;
+        if (_hasAnnotation(field, 'RT')) {
+          out.routes.add(
+            await _extractRouteData(
               field,
-              classElement,
+              '$className.$fieldName',
+              importUri,
               buildStep,
-            );
-            annotatedFields.add(routeData);
-          }
+            ),
+          );
+        }
+        if (_hasAnnotation(field, 'RTConfig')) {
+          out.configs.add(_configRef('$className.$fieldName', importUri, field));
         }
       }
     }
 
-    return annotatedFields;
+    for (final variable in library.topLevelVariables) {
+      if (!variable.isPublic) continue;
+      final name = variable.name;
+      if (name == null) continue;
+      if (_hasAnnotation(variable, 'RT')) {
+        out.routes.add(
+          await _extractRouteData(variable, name, importUri, buildStep),
+        );
+      }
+      if (_hasAnnotation(variable, 'RTConfig')) {
+        out.configs.add(_configRef(name, importUri, variable));
+      }
+    }
   }
 
-  /// Retrieves the `RT` annotation from a field's metadata if present, or returns null.
-  DartObject? _getRouteAnnotation(FieldElement field) {
-    for (final annotation in field.metadata.annotations) {
-      final element = annotation.element;
-      if (element is ConstructorElement) {
-        final enclosingElement = element.enclosingElement;
-        if (enclosingElement.name == 'RT') {
-          return annotation.computeConstantValue();
-        }
+  bool _hasAnnotation(Element element, String name) {
+    for (final annotation in element.metadata.annotations) {
+      final el = annotation.element;
+      if (el is ConstructorElement && el.enclosingElement.name == name) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Map<String, Object?> _configRef(
+    String ref,
+    Uri importUri,
+    VariableElement element,
+  ) {
+    if (!element.isConst) {
+      throw RouterBuilderError(
+        '@RTConfig on "$ref" must annotate a `const RoutePolicy`.',
+      );
+    }
+    final typeName = element.type.element?.name;
+    if (typeName != 'RoutePolicy') {
+      throw RouterBuilderError(
+        '@RTConfig on "$ref" must be a RoutePolicy (found ${typeName ?? 'unknown'}).',
+      );
+    }
+    return {'ref': ref, 'importUri': importUri.toString()};
+  }
+
+  // -------------------------------------------------------------------------
+  // EXTRACTION (DartObject-first with AST fallback; enum stays on AST)
+  // -------------------------------------------------------------------------
+
+  Future<Map<String, Object?>> _extractRouteData(
+    VariableElement element,
+    String ref,
+    Uri importUri,
+    BuildStep buildStep,
+  ) async {
+    final node = await buildStep.resolver.astNodeFor(
+      element.firstFragment,
+      resolve: true,
+    );
+    final init = (node is VariableDeclaration)
+        ? node.initializer
+        : null;
+    final creation = init is InstanceCreationExpression ? init : null;
+    final ctorName = creation?.constructorName.name?.name;
+    final kind = ctorName == 'branch'
+        ? 'branch'
+        : ctorName == 'redirect'
+            ? 'redirect'
+            : 'standard';
+
+    final value = element.computeConstantValue();
+
+    final data = <String, Object?>{
+      'ref': ref,
+      'importUri': importUri.toString(),
+      'routeName': value?.getField('name')?.toStringValue() ??
+          _positionalString(creation),
+      'path': value?.getField('_path')?.toStringValue() ??
+          _namedString(creation, 'path'),
+      'deepLinkNames': _stringList(value, 'deepLinkNames', creation),
+      'kind': kind,
+      'branchParentType': null,
+      'branchParentType_type': null,
+      'branchParentType_import': null,
+      'branchIndex': value?.getField('branchIndex')?.toIntValue() ??
+          _namedInt(creation, 'branchIndex'),
+      'branchKey': value?.getField('branchKey')?.toStringValue() ??
+          _namedString(creation, 'branchKey'),
+      'isConst': element.isConst,
+    };
+
+    if (kind == 'branch') {
+      _extractBranchParentType(data, creation);
+    }
+    return data;
+  }
+
+  void _extractBranchParentType(
+    Map<String, Object?> data,
+    InstanceCreationExpression? creation,
+  ) {
+    final expr = _namedExpr(creation, 'branchParentType');
+    if (expr == null) return;
+    data['branchParentType'] = expr.toSource();
+    final element = expr.staticType?.element;
+    if (element is EnumElement) {
+      data['branchParentType_type'] = element.name;
+      data['branchParentType_import'] = element.library.uri.toString();
+    } else {
+      throw RouterBuilderError(
+        'branchParentType for ${data['ref']} must be an enum value.',
+      );
+    }
+  }
+
+  Expression? _positionalExpr(InstanceCreationExpression? creation) {
+    if (creation == null) return null;
+    for (final arg in creation.argumentList.arguments) {
+      if (arg is! NamedExpression) return arg;
+    }
+    return null;
+  }
+
+  String? _positionalString(InstanceCreationExpression? creation) {
+    final expr = _positionalExpr(creation);
+    return expr is StringLiteral ? expr.stringValue : null;
+  }
+
+  Expression? _namedExpr(InstanceCreationExpression? creation, String name) {
+    if (creation == null) return null;
+    for (final arg in creation.argumentList.arguments) {
+      if (arg is NamedExpression && arg.name.label.name == name) {
+        return arg.expression;
       }
     }
     return null;
   }
 
-  // --------------------------------------------------------------------------
-  // ROUTE DATA EXTRACTION
-  // --------------------------------------------------------------------------
-
-  /// Extracts route data from an annotated field, including the import URI and
-  /// default properties from `RouteInfo`.
-  Future<Map<String, Object?>> _extractRouteData(
-    FieldElement field,
-    ClassElement classElement,
-    BuildStep buildStep,
-  ) async {
-    final importUri = await _getImportUri(classElement, buildStep);
-
-    final data = {
-      'className': classElement.name,
-      'fieldName': field.name,
-      'importUri': importUri.toString(),
-      'isBranch': false,
-      'isGlobalOnly': false,
-      'forRedirectionOnly': false,
-      'branchIndex': null,
-      'branchParentType': null,
-      'branchParentType_type': null, // Enum type name
-      'branchParentType_import': null, // Enum import URI
-      'branchKey': null,
-      'routeName': null,
-      'isConst': field.isConst,
-      'deepLinkAllowed': true,
-      'mustBeAuthorized': true,
-      'visibleNavBar': true,
-      'isPopupRoute': false,
-      'isTopLevelOnly': false,
-      'replaceAll': false,
-      'deepLinkNames': const <String>[],
-      'path': null,
-      'hasDeepLinkHandler': false,
-    };
-
-    await _enrichRouteDataFromNode(data, field, buildStep);
-
-    log.info('Extracted route data: $data');
-    return data;
+  String? _namedString(InstanceCreationExpression? creation, String name) {
+    final expr = _namedExpr(creation, name);
+    return expr is StringLiteral ? expr.stringValue : null;
   }
 
-  /// Parses the AST node of a field to determine its constructor type and enriches
-  /// the route data with initializer arguments.
-  Future<void> _enrichRouteDataFromNode(
-    Map<String, Object?> data,
-    FieldElement field,
-    BuildStep buildStep,
-  ) async {
-    final fieldNode = await buildStep.resolver.astNodeFor(
-      field.firstFragment,
-      resolve: true,
-    );
-    if (fieldNode is VariableDeclaration) {
-      final initializer = fieldNode.initializer;
-      if (initializer is InstanceCreationExpression) {
-        final constructorName = initializer.constructorName.name?.name;
-        if (constructorName == 'branch') {
-          data['isBranch'] = true;
-        } else if (constructorName == 'redirect') {
-          data['forRedirectionOnly'] = true;
-        }
-        _processInitializerArguments(data, initializer.argumentList.arguments);
-      }
-    } else {
-      log.warning('Field node is not a VariableDeclaration for ${field.name}');
-    }
+  int? _namedInt(InstanceCreationExpression? creation, String name) {
+    final expr = _namedExpr(creation, name);
+    return expr is IntegerLiteral ? expr.value : null;
   }
 
-  /// Processes initializer arguments, extracting the positional route name and named arguments.
-  void _processInitializerArguments(
-    Map<String, Object?> data,
-    List<Expression> args,
+  List<String> _stringList(
+    DartObject? value,
+    String field,
+    InstanceCreationExpression? creation,
   ) {
-    if (args.isNotEmpty) {
-      final firstArg = args.first;
-      if (firstArg is StringLiteral) {
-        data['routeName'] = firstArg.stringValue;
-      }
+    final fromConst = value
+        ?.getField(field)
+        ?.toListValue()
+        ?.map((e) => e.toStringValue())
+        .whereType<String>()
+        .toList();
+    if (fromConst != null) return fromConst;
+    final expr = _namedExpr(creation, field);
+    if (expr is ListLiteral) {
+      return expr.elements
+          .whereType<StringLiteral>()
+          .map((e) => e.stringValue)
+          .whereType<String>()
+          .toList();
     }
-
-    final namedArgs = args.whereType<NamedExpression>().toList();
-
-    for (final arg in namedArgs) {
-      if (arg.name.label.name == 'policy') {
-        _processNamedArgument(data, arg);
-      }
-    }
-
-    for (final arg in namedArgs) {
-      if (arg.name.label.name != 'policy') {
-        _processNamedArgument(data, arg);
-      }
-    }
+    return const [];
   }
 
-  /// Assigns values from named arguments to the route data map, handling enums for
-  /// `branchParentType` specifically.
-  void _processNamedArgument(Map<String, Object?> data, NamedExpression arg) {
-    final name = arg.name.label.name;
-    final expression = arg.expression;
+  // -------------------------------------------------------------------------
+  // CODE GENERATION
+  // -------------------------------------------------------------------------
 
-    switch (name) {
-      case 'isGlobalOnly':
-        if (expression is BooleanLiteral) {
-          data['isGlobalOnly'] = expression.value;
-        }
-      case 'branchIndex':
-        if (expression is IntegerLiteral) {
-          data['branchIndex'] = expression.value;
-        }
-      case 'branchParentType':
-        data['branchParentType'] =
-            expression.toSource(); // e.g., 'MyShellType.home'
-        final enumType = expression.staticType;
-        final enumElement = enumType?.element;
-        if (enumElement is EnumElement) {
-          data['branchParentType_type'] =
-              enumElement.name; // e.g., 'MyShellType'
-          final enumLibrary = enumElement.library;
-          final importUri = enumLibrary.uri.toString();
-          data['branchParentType_import'] =
-              importUri; // e.g., 'package:my_app/shell.dart'
-        } else {
-          log.warning(
-            'branchParentType for ${data['fieldName']} is not an enum value.',
-          );
-        }
-      case 'branchKey':
-        if (expression is StringLiteral) {
-          data['branchKey'] = expression.stringValue;
-        }
-      case 'deepLinkAllowed':
-        if (expression is BooleanLiteral) {
-          data['deepLinkAllowed'] = expression.value;
-        }
-      case 'mustBeAuthorized':
-        if (expression is BooleanLiteral) {
-          data['mustBeAuthorized'] = expression.value;
-        }
-      case 'visibleNavBar':
-        if (expression is BooleanLiteral) {
-          data['visibleNavBar'] = expression.value;
-        }
-      case 'isPopupRoute':
-        if (expression is BooleanLiteral) {
-          data['isPopupRoute'] = expression.value;
-        }
-      case 'replaceAll':
-        if (expression is BooleanLiteral) {
-          data['replaceAll'] = expression.value;
-        }
-      case 'isTopLevelOnly':
-        if (expression is BooleanLiteral) {
-          data['isTopLevelOnly'] = expression.value;
-        }
-      case 'deepLinkNames':
-        if (expression is ListLiteral) {
-          final names =
-              expression.elements
-                  .whereType<StringLiteral>()
-                  .map((e) => e.stringValue)
-                  .whereType<String>()
-                  .toList();
-          data['deepLinkNames'] = names;
-        }
-      case 'path':
-        if (expression is StringLiteral) {
-          data['path'] = expression.stringValue;
-        }
-      case 'deepLinkHandler':
-        // Just mark that it has a handler, we can't serialize the instance
-        data['hasDeepLinkHandler'] = true;
-      case 'policy':
-        _processPolicyArgument(data, expression);
-    }
-  }
-
-  /// Applies inline `RoutePolicy(...)` values to generated route metadata.
-  void _processPolicyArgument(Map<String, Object?> data, Expression policy) {
-    if (policy is! InstanceCreationExpression) {
-      return;
-    }
-
-    for (final arg
-        in policy.argumentList.arguments.whereType<NamedExpression>()) {
-      final name = arg.name.label.name;
-      final expression = arg.expression;
-
-      switch (name) {
-        case 'mustBeAuthorized':
-          if (expression is BooleanLiteral) {
-            data['mustBeAuthorized'] = expression.value;
-          }
-        case 'pushGlobally':
-          if (expression is BooleanLiteral) {
-            data['isGlobalOnly'] = expression.value;
-          }
-        case 'isPopupRoute':
-          if (expression is BooleanLiteral) {
-            data['isPopupRoute'] = expression.value;
-          }
-      }
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // FILE WRITING
-  // --------------------------------------------------------------------------
-
-  /// Resolves the import URI for a class element's library.
-  Future<Uri> _getImportUri(
-    ClassElement classElement,
-    BuildStep buildStep,
-  ) async {
-    final library = classElement.library;
-    final assetId = await buildStep.resolver.assetIdForElement(library);
-    return assetId.uri;
-  }
-
-  /// Formats the generated Dart code using DartFormatter for consistency.
-  String _formatGeneratedCode(List<Map<String, Object?>> fields) {
-    final code = _generateRouteInfoHelperCode(fields);
+  String _formatGeneratedCode(_Collected collected) {
+    final code = _generateCode(collected);
     final formatter = DartFormatter(
       languageVersion: DartFormatter.latestLanguageVersion,
     );
     return formatter.format(code);
   }
 
-  /// Writes the formatted code to `lib/route_info_helper.dart`.
-  Future<void> _writeOutputFile(
-    BuildStep buildStep,
-    String formattedCode,
-  ) async {
-    final outputId = AssetId(
-      buildStep.inputId.package,
-      'lib/route_info_helper.dart',
-    );
-    log.info('Writing output to ${outputId.path}...');
-    await buildStep.writeAsString(outputId, formattedCode);
-  }
-
-  // --------------------------------------------------------------------------
-  // CODE GENERATION
-  // --------------------------------------------------------------------------
-
-  /// Generates the complete source code for `route_info_helper.dart`, including
-  /// a header comment and the definitions of [RouteInfoHelper] and [MyRoutes].
-  String _generateRouteInfoHelperCode(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          // Generated file header
-          ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND.')
-          ..writeln('//')
-          ..writeln(
-            '// This file is generated by the GenerateRouteInfoHelperBuilder.',
-          )
-          ..writeln('// To update it, run:')
-          ..writeln('//   flutter pub run build_runner build')
-          ..writeln()
-          ..writeln('// ignore_for_file: provider_dependencies')
-          ..writeln();
-
-    _writeImports(buffer, fields);
-    _writeRouteInfoHelperClass(buffer, fields);
-    _writeMyRoutesClass(buffer, fields);
+  String _generateCode(_Collected collected) {
+    final routes = collected.routes;
+    final buffer = StringBuffer()
+      ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND.')
+      ..writeln('//')
+      ..writeln('// Run: dart run build_runner build')
+      ..writeln()
+      ..writeln('// ignore_for_file: type=lint')
+      ..writeln();
+    _writeImports(buffer, collected);
+    _writeRoutesClass(buffer, routes);
+    _writeHelperClass(buffer, collected);
     return buffer.toString();
   }
 
-  /// Writes import statements to the buffer.
-  void _writeImports(StringBuffer buffer, List<Map<String, Object?>> fields) {
-    final importUris = fields.map((f) => f.getString('importUri')).toSet()
-      ..addAll([
-        'package:dart_helper_utils/dart_helper_utils.dart',
-        'package:router_builder/router_builder.dart',
-      ]);
-
-    for (final field in fields) {
-      final bpImport = field['branchParentType_import'];
-      if (bpImport is String && bpImport.isNotEmpty) {
-        importUris.add(bpImport);
-      }
+  void _writeImports(StringBuffer buffer, _Collected collected) {
+    final uris = <String>{
+      'package:dart_helper_utils/dart_helper_utils.dart',
+      'package:router_builder/router_builder.dart',
+    };
+    for (final r in collected.routes) {
+      uris.add(r['importUri'] as String);
+      final bp = r['branchParentType_import'];
+      if (bp is String && bp.isNotEmpty) uris.add(bp);
     }
-
-    final sortedUris = importUris.toList()..sort();
-    for (final uri in sortedUris) {
+    for (final c in collected.configs) {
+      uris.add(c['importUri'] as String);
+    }
+    for (final uri in uris.toList()..sort()) {
       buffer.writeln("import '$uri';");
     }
     buffer.writeln();
   }
 
-  /// Writes the definition of the [RouteInfoHelper] class to the buffer.
-  void _writeRouteInfoHelperClass(
-    StringBuffer buffer,
-    List<Map<String, Object?>> fields,
-  ) {
+  void _writeRoutesClass(StringBuffer buffer, List<Map<String, Object?>> routes) {
     buffer
-      ..writeln(
-        '/// A helper class providing access to route information and utilities.',
-      )
-      ..writeln('///')
-      ..writeln(
-        '/// Use this class to access categorized routes (e.g., branches, global routes)',
-      )
-      ..writeln('/// and utility methods for route lookups.')
-      ..writeln('abstract class RouteInfoHelper {')
-      ..writeln('  // Branch-related members')
-      ..writeln(_generateBranchesMap(fields))
-      ..writeln()
-      ..writeln('  // Static lists for branches by enum value')
-      ..writeln(_generateEnumValueBranchLists(fields))
-      ..writeln()
-      ..writeln('  // Other route categories')
-      ..writeln(_generateNormalRoutesList(fields))
-      ..writeln()
-      ..writeln(_generateGlobalRoutesList(fields))
-      ..writeln()
-      ..writeln(_generatePopupRoutesList(fields))
-      ..writeln()
-      ..writeln(_generateTopLevelRoutesList(fields))
-      ..writeln()
-      ..writeln(_generateAuthorizedRoutesList(fields))
-      ..writeln()
-      ..writeln(_generateDeepLinkMap(fields))
-      ..writeln()
-      ..writeln(_generateAllRoutesList())
-      ..writeln()
-      ..writeln('  // Helper methods')
-      ..writeln(_generateFromNameMethod())
-      ..writeln(_generateDeepLinkHelpers())
-      ..writeln(_generateBranchesHelpers(fields))
+      ..writeln('/// Static constants for every defined route.')
+      ..writeln('abstract class $routeClassName {');
+    for (final r in routes) {
+      final routeName = r['routeName'] as String?;
+      if (routeName == null || routeName.isEmpty) continue;
+      final ident = _safeIdentifier(routeName);
+      final isConst = r['isConst'] == true;
+      buffer.writeln(
+        '  static ${isConst ? 'const' : 'final'} RouteInfo $ident = ${r['ref']};',
+      );
+    }
+    buffer
       ..writeln('}')
       ..writeln();
   }
 
-  /// Generates a map of branch routes grouped by enum value.
-  String _generateBranchesMap(List<Map<String, Object?>> fields) {
-    final branchFields = fields.where((f) => f['isBranch'] == true).toList();
-    var enumTypeName = 'Enum';
-    if (branchFields.isNotEmpty) {
-      final firstEnumType =
-          branchFields.first['branchParentType_type'] as String?;
-      if (firstEnumType != null) {
-        final allSame = branchFields.every(
-          (f) => f['branchParentType_type'] == firstEnumType,
-        );
-        if (allSame) {
-          enumTypeName = firstEnumType;
-        } else {
-          log.severe(
-            'All branch routes must use the same enum type for branchParentType.',
-          );
-        }
-      }
-    }
+  void _writeHelperClass(StringBuffer buffer, _Collected collected) {
+    final routes = collected.routes;
+    buffer
+      ..writeln('/// Categorized routes and deep-link utilities.')
+      ..writeln('abstract class $helperClassName {')
+      ..writeln(_generateBranchesMap(routes))
+      ..writeln(_generateEnumBranchLists(routes))
+      ..writeln(_generateAllRoutes(routes))
+      ..writeln(_generateCategoryGetters())
+      ..writeln(_generateDeepLinkMap(routes))
+      ..writeln(_generateFromName())
+      ..writeln(_generateDeepLinkHelpers())
+      ..writeln(_generateBranchHelpers(routes))
+      ..writeln(_generateInstallDefaults(collected.configs))
+      ..writeln('}')
+      ..writeln();
+  }
 
+  String _branchEnumType(List<Map<String, Object?>> branches) {
+    if (branches.isEmpty) return 'Enum';
+    final first = branches.first['branchParentType_type'] as String?;
+    if (first == null) return 'Enum';
+    final allSame =
+        branches.every((b) => b['branchParentType_type'] == first);
+    if (!allSame) {
+      throw RouterBuilderError(
+        'All branch routes must share a single branchParentType enum type.',
+      );
+    }
+    return first;
+  }
+
+  String _generateBranchesMap(List<Map<String, Object?>> routes) {
+    final branches = routes.where((r) => r['kind'] == 'branch').toList();
+    final enumType = _branchEnumType(branches);
     final grouped = <String, List<Map<String, Object?>>>{};
-    for (final field in branchFields) {
-      final parentID = field['branchParentType'] as String?;
-      if (parentID != null) {
-        grouped.putIfAbsent(parentID, () => []).add(field);
+    for (final f in branches) {
+      final parent = f['branchParentType'] as String?;
+      if (parent != null) grouped.putIfAbsent(parent, () => []).add(f);
+    }
+    for (final g in grouped.values) {
+      g.sort(
+        (a, b) => ((a['branchIndex'] as int?) ?? 0)
+            .compareTo((b['branchIndex'] as int?) ?? 0),
+      );
+    }
+    final buffer = StringBuffer()
+      ..writeln('  /// Branch routes grouped by shell enum value.')
+      ..writeln(
+        '  static final Map<$enumType, Map<int?, RouteInfo>> branches = {',
+      );
+    grouped.forEach((parent, list) {
+      buffer.writeln('    $parent: {');
+      for (final f in list) {
+        buffer.writeln('      ${f['ref']}.branchIndex: ${f['ref']},');
       }
-    }
-
-    // Sort each group by branchIndex
-    for (final group in grouped.values) {
-      group.sort((a, b) {
-        final aIndex = a['branchIndex'] as int?;
-        final bIndex = b['branchIndex'] as int?;
-        if (aIndex == null && bIndex == null) return 0;
-        if (aIndex == null) return 1;
-        if (bIndex == null) return -1;
-        return aIndex.compareTo(bIndex);
-      });
-    }
-
-    final buffer =
-        StringBuffer()
-          ..writeln(
-            '  /// Map of enum values to their corresponding branch routes.',
-          )
-          ..writeln('  ///')
-          ..writeln(
-            '  /// All branch routes must use the enum type `$enumTypeName`.',
-          )
-          ..writeln(
-            '  static final Map<$enumTypeName, Map<int?, RouteInfo>> branches = {',
-          );
-    grouped.forEach((parentID, list) {
-      buffer
-        ..writeln('    $parentID: {')
-        ..writeAll(
-          list.map(
-            (field) =>
-                '      ${field['className']}.${field['fieldName']}.branchIndex: ${field['className']}.${field['fieldName']},',
-          ),
-          '\n',
-        )
-        ..writeln('    },');
+      buffer.writeln('    },');
     });
     buffer.writeln('  };');
     return buffer.toString();
   }
 
-  /// Generates static lists for each enum value's branches, e.g., `homeBranches`.
-  String _generateEnumValueBranchLists(List<Map<String, Object?>> fields) {
-    final branchFields = fields.where((f) => f['isBranch'] == true).toList();
-    if (branchFields.isEmpty) return ''; // No branches, skip generation
-
-    // Verify consistent enum type across all branches
-    final firstEnumType =
-        branchFields.first['branchParentType_type'] as String?;
-    if (firstEnumType != null) {
-      final allSame = branchFields.every(
-        (f) => f['branchParentType_type'] == firstEnumType,
+  String _generateEnumBranchLists(List<Map<String, Object?>> routes) {
+    final branches = routes.where((r) => r['kind'] == 'branch').toList();
+    if (branches.isEmpty) return '';
+    _branchEnumType(branches);
+    final grouped = <String, List<Map<String, Object?>>>{};
+    for (final f in branches) {
+      final parent = f['branchParentType'] as String?;
+      if (parent != null) grouped.putIfAbsent(parent, () => []).add(f);
+    }
+    for (final g in grouped.values) {
+      g.sort(
+        (a, b) => ((a['branchIndex'] as int?) ?? 0)
+            .compareTo((b['branchIndex'] as int?) ?? 0),
       );
-      if (!allSame) {
-        log.severe(
-          'Inconsistent enum types detected; skipping enum value lists.',
-        );
-        return '';
-      }
     }
-
-    // Group branches by enum value
-    final enumValuesMap = <String, List<Map<String, Object?>>>{};
-    for (final field in branchFields) {
-      final parentID = field['branchParentType'] as String?;
-      if (parentID != null) {
-        enumValuesMap.putIfAbsent(parentID, () => []).add(field);
-      }
-    }
-
-    // Sort each group by branchIndex
-    for (final routes in enumValuesMap.values) {
-      routes.sort((a, b) {
-        final aIndex = a['branchIndex'] as int?;
-        final bIndex = b['branchIndex'] as int?;
-        if (aIndex == null && bIndex == null) return 0;
-        if (aIndex == null) return 1;
-        if (bIndex == null) return -1;
-        return aIndex.compareTo(bIndex);
-      });
-    }
-
     final buffer = StringBuffer();
-    enumValuesMap.forEach((enumValue, routes) {
-      // Extract the enum value name (e.g., 'home' from 'MyShellType.home')
-      final valueName = enumValue.split('.').last;
-      final listName = '${valueName}Branches';
-
+    grouped.forEach((parent, list) {
+      final valueName = parent.split('.').last;
       buffer
-        ..writeln('  /// Branches for `$enumValue`.')
-        ..writeln('  static final List<RouteInfo> $listName = [')
-        ..writeAll(
-          routes.map(
-            (field) => '    ${field['className']}.${field['fieldName']},',
-          ),
-          '\n',
-        )
+        ..writeln('  /// Branches for `$parent`.')
+        ..writeln('  static final List<RouteInfo> ${valueName}Branches = [');
+      for (final f in list) {
+        buffer.writeln('    ${f['ref']},');
+      }
+      buffer
         ..writeln('  ];')
         ..writeln();
     });
-
     return buffer.toString().trimRight();
   }
 
-  /// Generates a list of normal routes (non-branch, non-global, non-redirection).
-  String _generateNormalRoutesList(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          ..writeln(
-            '  /// List of normal routes (non-branch, non-global, non-redirection).',
-          )
-          ..writeln('  static final List<RouteInfo> normalRoutes = [');
-    for (final field in fields) {
-      if (field['isBranch'] != true &&
-          field['isGlobalOnly'] != true &&
-          field['forRedirectionOnly'] != true) {
-        buffer.writeln('    ${field['className']}.${field['fieldName']},');
-      }
-    }
-    buffer.writeln('  ];');
-    return buffer.toString();
-  }
-
-  /// Generates a list of global routes.
-  String _generateGlobalRoutesList(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          ..writeln('  /// List of global routes.')
-          ..writeln('  static final List<RouteInfo> globalRoutes = [');
-    for (final field in fields) {
-      if (field['isGlobalOnly'] == true &&
-          field['isBranch'] != true &&
-          field['forRedirectionOnly'] != true) {
-        buffer.writeln('    ${field['className']}.${field['fieldName']},');
-      }
-    }
-    buffer.writeln('  ];');
-    return buffer.toString();
-  }
-
-  /// Generates a list of popup routes.
-  String _generatePopupRoutesList(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          ..writeln('  /// List of popup routes.')
-          ..writeln('  static final List<RouteInfo> popupRoutes = [');
-    for (final field in fields) {
-      if (field['isPopupRoute'] == true) {
-        buffer.writeln('    ${field['className']}.${field['fieldName']},');
-      }
-    }
-    buffer.writeln('  ];');
-    return buffer.toString();
-  }
-
-  /// Generates a list of top-level-only routes.
-  String _generateTopLevelRoutesList(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          ..writeln('  /// List of top-level-only routes.')
-          ..writeln('  static final List<RouteInfo> topLevelRoutes = [');
-    for (final field in fields) {
-      if (field['isTopLevelOnly'] == true) {
-        buffer.writeln('    ${field['className']}.${field['fieldName']},');
-      }
-    }
-    buffer.writeln('  ];');
-    return buffer.toString();
-  }
-
-  /// Generates a list of routes that require authorization.
-  String _generateAuthorizedRoutesList(List<Map<String, Object?>> fields) {
-    final buffer =
-        StringBuffer()
-          ..writeln('  /// List of routes that require authorization.')
-          ..writeln('  static final List<RouteInfo> authorizedRoutes = [');
-    for (final field in fields) {
-      if (field['mustBeAuthorized'] == true) {
-        buffer.writeln('    ${field['className']}.${field['fieldName']},');
-      }
-    }
-    buffer.writeln('  ];');
-    return buffer.toString();
-  }
-
-  /// Generates a comprehensive map for deep link and route resolution with conflict detection.
-  String _generateDeepLinkMap(List<Map<String, Object?>> fields) {
-    final buffer = StringBuffer();
-    final deepLinkMap = <String, String>{}; // key -> "Class.field"
-    final conflicts = <String, List<String>>{}; // key -> [sources]
-
-    // Build map and detect conflicts
-    for (final field in fields) {
-      if (field['deepLinkAllowed'] == false) {
-        continue;
-      }
-      if (field['forRedirectionOnly'] == true) {
-        continue;
-      }
-
-      final routeReference = "${field['className']}.${field['fieldName']}";
-      final keysToAdd = _extractAllRouteKeys(field);
-
-      for (final key in keysToAdd) {
-        if (deepLinkMap.containsKey(key)) {
-          conflicts[key] ??= [deepLinkMap[key]!];
-          conflicts[key]!.add(routeReference);
-        } else {
-          deepLinkMap[key] = routeReference;
-        }
-      }
-    }
-
-    // Report conflicts
-    if (conflicts.isNotEmpty) {
-      _reportConflicts(conflicts);
-    }
-
-    // Generate code with documentation
-    buffer
-      ..writeln('  /// Comprehensive map for deep link and route resolution.')
-      ..writeln(
-        '  /// Keys include: route names, path segments, and deep link aliases.',
-      )
-      ..writeln('  /// ')
-      ..writeln(
-        '  /// This map is used by the DeepLinkResolver to find routes from URIs.',
-      )
-      ..writeln('  static final Map<String, RouteInfo> deepLinkMap = {');
-
-    // Sort keys for consistent output
-    final sortedKeys = deepLinkMap.keys.toList()..sort();
-    for (final key in sortedKeys) {
-      buffer.writeln("    '$key': ${deepLinkMap[key]},");
-    }
-
-    buffer.writeln('  };');
-    return buffer.toString();
-  }
-
-  /// Extracts all possible keys for a route (name, path segment, deep link names).
-  Set<String> _extractAllRouteKeys(Map<String, Object?> field) {
-    final keys = <String>{};
-    final routeName = field['routeName'] as String?;
-    final deepLinkNames = field['deepLinkNames'] as List<String>? ?? [];
-
-    // 1. Always add route name as a key
-    if (routeName != null && routeName.isNotEmpty) {
-      keys.add(routeName);
-    }
-
-    // 2. Add deep link aliases (if any)
-    if (deepLinkNames.isNotEmpty) {
-      keys.addAll(deepLinkNames);
-    }
-
-    // 3. Path-based key (first segment) - always add if different
-    final path = field['path'] as String?;
-    if (path != null && path.isNotEmpty) {
-      final pathKey = _extractPathKey(path);
-      if (pathKey != null && !keys.contains(pathKey)) {
-        keys.add(pathKey);
-      }
-    }
-
-    return keys;
-  }
-
-  /// Extracts the first segment from a path as a potential key.
-  String? _extractPathKey(String path) {
-    // Remove leading slash if present
-    final cleanPath = path.startsWith('/') ? path.substring(1) : path;
-
-    // Extract first segment (before any / or :)
-    final match = RegExp('^([^/:]+)').firstMatch(cleanPath);
-    return match?.group(1);
-  }
-
-  /// Reports deep link key conflicts to the console.
-  void _reportConflicts(Map<String, List<String>> conflicts) {
-    for (final entry in conflicts.entries) {
-      final key = entry.key;
-      final sources = entry.value;
-      log.severe('''
-[SEVERE] Deep Link Key Conflict Detected!
-  Key: '$key'
-  Used by: ${sources.join(', ')}
-  
-  Resolution: Each key must be unique across all routes. Please:
-  1. Change the route name, OR
-  2. Modify the path, OR  
-  3. Update deepLinkNames to avoid this conflict.
-''');
-    }
-  }
-
-  /// Combines all routes into a single list.
-  String _generateAllRoutesList() {
+  String _generateAllRoutes(List<Map<String, Object?>> routes) {
+    final nonBranch = routes
+        .where((r) => r['kind'] != 'branch')
+        .map((r) => '    ${r['ref']},')
+        .join('\n');
     return '''
-  /// Combined list of all routes.
+  /// Every annotated route (branches, standard, popup, global, redirect-only).
   static final List<RouteInfo> allRoutes = [
-    ...branches.values.expand((inner) => inner.values),
-    ...normalRoutes,
-    ...globalRoutes,
+    ...branches.values.expand((m) => m.values),
+$nonBranch
   ];
 ''';
   }
 
-  /// Generates a method to find a route by its name.
-  String _generateFromNameMethod() {
-    return '''
-  /// Returns the [RouteInfo] for the given route name, or null if not found.
-  static RouteInfo? fromName(String? name) {
-    return allRoutes.firstWhereOrNull((route) => route.name == name);
-  }
+  String _generateCategoryGetters() => '''
+  /// Standard routes (non-branch, non-global, non-redirect).
+  static List<RouteInfo> get normalRoutes => allRoutes
+      .where((r) => !r.isBranch && !r.forRedirectionOnly && !r.pushGlobally)
+      .toList();
+
+  /// Routes pushed on the root navigator.
+  static List<RouteInfo> get globalRoutes => allRoutes
+      .where((r) => r.pushGlobally && !r.isBranch && !r.forRedirectionOnly)
+      .toList();
+
+  /// Popup routes.
+  static List<RouteInfo> get popupRoutes =>
+      allRoutes.where((r) => r.isPopupRoute).toList();
+
+  /// Top-level-only routes.
+  static List<RouteInfo> get topLevelRoutes =>
+      allRoutes.where((r) => r.isTopLevelOnly).toList();
+
+  /// Routes that require authorization.
+  static List<RouteInfo> get authorizedRoutes =>
+      allRoutes.where((r) => r.mustBeAuthorized).toList();
+
+  /// Redirect-only routes.
+  static List<RouteInfo> get redirectRoutes =>
+      allRoutes.where((r) => r.forRedirectionOnly).toList();
 ''';
+
+  Set<String> _routeKeys(Map<String, Object?> r) {
+    final keys = <String>{};
+    final name = r['routeName'] as String?;
+    if (name != null && name.isNotEmpty) keys.add(name);
+    keys.addAll(r['deepLinkNames'] as List<String>? ?? const []);
+    final path = r['path'] as String?;
+    if (path != null && path.isNotEmpty) {
+      final clean = path.startsWith('/') ? path.substring(1) : path;
+      final seg = RegExp('^([^/:]+)').firstMatch(clean)?.group(1);
+      if (seg != null && seg.isNotEmpty) keys.add(seg);
+    }
+    return keys;
   }
 
-  String _generateDeepLinkHelpers() {
-    return '''
-  /// Resolve a deep link URI into a [RouteInfo] and [RouteArgs].
+  String _generateDeepLinkMap(List<Map<String, Object?>> routes) {
+    final map = <String, String>{};
+    final conflicts = <String, List<String>>{};
+    for (final r in routes) {
+      final ref = r['ref'] as String;
+      for (final key in _routeKeys(r)) {
+        if (map.containsKey(key)) {
+          conflicts.putIfAbsent(key, () => [map[key]!]).add(ref);
+        } else {
+          map[key] = ref;
+        }
+      }
+    }
+    if (conflicts.isNotEmpty) {
+      final detail = conflicts.entries
+          .map((e) => "  '${e.key}' used by ${e.value.join(', ')}")
+          .join('\n');
+      if (failOnConflict) {
+        throw RouterBuilderError(
+          'Deep-link key conflict(s):\n$detail\n'
+          'Each route name, first path segment, and deepLinkNames alias must be '
+          'unique. Rename the route, change its path, or adjust deepLinkNames.',
+        );
+      }
+      log.warning('Deep-link key conflict(s) (keeping first):\n$detail');
+    }
+    final buffer = StringBuffer()
+      ..writeln(
+        '  /// Lookup by deep-link key (route name, first path segment, alias).',
+      )
+      ..writeln('  static final Map<String, RouteInfo> deepLinkMap = {');
+    for (final key in map.keys.toList()..sort()) {
+      buffer.writeln("    '$key': ${map[key]},");
+    }
+    buffer.writeln('  };');
+    return buffer.toString();
+  }
+
+  String _generateFromName() => '''
+  /// Returns the [RouteInfo] for [name], or null.
+  static RouteInfo? fromName(String? name) =>
+      allRoutes.firstWhereOrNull((route) => route.name == name);
+''';
+
+  String _generateDeepLinkHelpers() => '''
+  /// Resolves a deep-link URI into a [RouteInfo] and [RouteArgs].
   static DeepLinkMatch? resolveDeepLink(
     Uri incoming, {
     Iterable<String> allowedHosts = const [],
   }) {
-    final normalized = DeepLinkMatcher.normalizeToAppPath(
-      incoming,
-      hosts: allowedHosts,
-    );
-    return const DeepLinkMatcher().match(
-      normalized,
-      allRoutes,
-      original: incoming,
-    );
+    final normalized =
+        DeepLinkMatcher.normalizeToAppPath(incoming, hosts: allowedHosts);
+    return const DeepLinkMatcher()
+        .match(normalized, allRoutes, original: incoming);
   }
 
-  /// Normalize an incoming deep link URI to an app-internal path.
+  /// Normalizes an incoming deep-link URI to an app-internal path.
   static Uri normalizeToAppPath(
     Uri incoming, {
     Iterable<String> allowedHosts = const [],
-  }) {
-    return DeepLinkMatcher.normalizeToAppPath(
-      incoming,
-      hosts: allowedHosts,
-    );
+  }) =>
+      DeepLinkMatcher.normalizeToAppPath(incoming, hosts: allowedHosts);
+''';
+
+  String _generateBranchHelpers(List<Map<String, Object?>> routes) {
+    final enumType =
+        _branchEnumType(routes.where((r) => r['kind'] == 'branch').toList());
+    return '''
+  /// Branch routes for [shell], or null.
+  static Map<int?, RouteInfo>? branchesFor($enumType shell) => branches[shell];
+
+  /// All branch routes across shells.
+  static List<RouteInfo> allBranches() =>
+      branches.values.expand((m) => m.values).toList();
+
+  /// Branch route for [shell] at [index], or null.
+  static RouteInfo? branchByIndex($enumType shell, int? index) =>
+      branches[shell]?[index];
+
+  /// Whether [route] belongs to [shell].
+  static bool isRouteInShell(RouteInfo route, $enumType shell) =>
+      branches[shell]?.containsValue(route) ?? false;
+
+  /// Finds a branch route by its [key].
+  static RouteInfo? branchByKey(String key) => branches.values
+      .expand((m) => m.values)
+      .firstWhereOrNull((route) => route.branchKey == key);
+''';
+  }
+
+  String _generateInstallDefaults(List<Map<String, Object?>> configs) {
+    if (configs.isEmpty) {
+      return '''
+  /// Installs global route defaults. No @RTConfig was declared, so this only
+  /// marks configuration as initialized; built-in defaults remain in effect.
+  static void installDefaults() {
+    RouterBuilderConfig.markConfigured();
+  }
+''';
+    }
+    final ref = configs.first['ref'];
+    return '''
+  /// Installs the app's @RTConfig policy as global defaults. Call once in main().
+  static void installDefaults() {
+    RouterBuilderConfig.setDefaults($ref);
+    RouterBuilderConfig.markConfigured();
   }
 ''';
   }
 
-  /// Generates helper methods for working with branch routes.
-  String _generateBranchesHelpers(List<Map<String, Object?>> fields) {
-    final branchFields = fields.where((f) => f['isBranch'] == true).toList();
-    var enumTypeName = 'Enum';
-    if (branchFields.isNotEmpty) {
-      final firstEnumType =
-          branchFields.first['branchParentType_type'] as String?;
-      if (firstEnumType != null) {
-        final allSame = branchFields.every(
-          (f) => f['branchParentType_type'] == firstEnumType,
-        );
-        if (allSame) {
-          enumTypeName = firstEnumType;
-        } else {
-          log.severe(
-            'All branch routes must use the same enum type for branchParentType.',
-          );
-        }
-      }
-    }
-
-    final buffer =
-        StringBuffer()
-          ..writeln(
-            '  /// Returns the map of branch routes for the given shell enum value.',
-          )
-          ..writeln(
-            '  static Map<int?, RouteInfo>? branchesFor($enumTypeName shell) {',
-          )
-          ..writeln('    return branches[shell];')
-          ..writeln('  }')
-          ..writeln()
-          ..writeln('  /// Returns a list of all branch routes.')
-          ..writeln('  static List<RouteInfo> allBranches() {')
-          ..writeln(
-            '    return branches.values.expand((innerMap) => innerMap.values).toList();',
-          )
-          ..writeln('  }')
-          ..writeln()
-          ..writeln(
-            '  /// Returns the branch route for the given shell and index, if it exists.',
-          )
-          ..writeln(
-            '  static RouteInfo? branchByIndex($enumTypeName shell, int? index) {',
-          )
-          ..writeln('    return branches[shell]?[index];')
-          ..writeln('  }')
-          ..writeln()
-          ..writeln(
-            '  /// Checks if a given route belongs to the specified shell.',
-          )
-          ..writeln(
-            '  static bool isRouteInShell(RouteInfo route, $enumTypeName shell) {',
-          )
-          ..writeln(
-            '    return branches[shell]?.containsValue(route) ?? false;',
-          )
-          ..writeln('  }')
-          ..writeln()
-          ..writeln('  /// Finds a branch route by its key.')
-          ..writeln('  static RouteInfo? branchByKey(String key) {')
-          ..writeln('    return branches.values')
-          ..writeln('        .expand((innerMap) => innerMap.values)')
-          ..writeln(
-            '        .firstWhereOrNull((route) => route.branchKey == key);',
-          )
-          ..writeln('  }');
-    return buffer.toString();
-  }
-
-  // --------------------------------------------------------------------------
-  // GENERATED CLASS: MyRoutes
-  // --------------------------------------------------------------------------
-
-  /// Writes the definition of the [MyRoutes] class to the buffer.
-  void _writeMyRoutesClass(
-    StringBuffer buffer,
-    List<Map<String, Object?>> fields,
-  ) {
-    buffer
-      ..writeln(
-        '/// A class providing static constants for all defined routes.',
-      )
-      ..writeln('abstract class MyRoutes {');
-    for (final field in fields) {
-      final routeName = field['routeName'] as String?;
-      if (routeName == null) continue;
-
-      final className = _safeString(field['className']);
-      final fieldName = _safeString(field['fieldName']);
-      final isConst = field['isConst'] == true;
-      final safeVarName = _makeSafeIdentifier(routeName);
-
-      buffer.writeln(
-        '  static ${isConst ? 'const' : 'final'} RouteInfo $safeVarName = '
-        '$className.$fieldName;',
-      );
-    }
-    buffer.writeln('}');
-  }
-
-  // --------------------------------------------------------------------------
-  // UTILITY METHODS
-  // --------------------------------------------------------------------------
-
-  /// Safely converts a nullable [Object] into a string.
-  String _safeString(Object? val) => val?.toString() ?? '';
-
-  /// Makes a string safe to use as an identifier by replacing any illegal characters
-  /// with underscores and prefixing with an underscore if it starts with a digit.
-  String _makeSafeIdentifier(String name) {
+  String _safeIdentifier(String name) {
     var safe = name.replaceAll(RegExp('[^a-zA-Z0-9_]'), '_');
-    if (RegExp('^[0-9]').hasMatch(safe)) {
-      safe = '_$safe';
-    }
+    if (RegExp('^[0-9]').hasMatch(safe)) safe = '_$safe';
     return safe;
   }
 }
-
-/// Factory function to create the [GenerateRouteInfoHelperBuilder].
-Builder generateRouteInfoHelperBuilder(BuilderOptions options) =>
-    GenerateRouteInfoHelperBuilder();

@@ -6,4 +6,4 @@
 library;
 
 export 'src/generators/generate_route_info_helper.dart'
-    show generateRouteInfoHelperBuilder;
+    show generateRouteInfoHelperBuilder, RouterBuilderError;
