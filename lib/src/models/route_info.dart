@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 import 'package:router_builder/src/handlers/deep_link_handler.dart';
+import 'package:router_builder/src/models/duplicate_route_behavior.dart';
 import 'package:router_builder/src/models/route_args.dart';
 
 /// Builder function for creating a localized title for a route.

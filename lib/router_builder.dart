@@ -6,6 +6,7 @@ library;
 export 'src/annotations/route.dart';
 export 'src/deeplink/deep_link_matcher.dart';
 export 'src/handlers/deep_link_handler.dart';
+export 'src/models/duplicate_route_behavior.dart';
 export 'src/models/route_args.dart';
 export 'src/models/route_info.dart';
 export 'src/models/route_policy.dart';

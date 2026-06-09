@@ -1,3 +1,4 @@
+import 'package:router_builder/src/models/duplicate_route_behavior.dart';
 import 'package:router_builder/src/models/route_policy.dart';
 
 /// Configuration for the router builder package.

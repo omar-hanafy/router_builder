@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:router_builder/src/models/duplicate_route_behavior.dart';
 import 'package:router_builder/src/models/route_info.dart';
 import 'package:router_builder/src/models/route_policy.dart';
 import 'package:router_builder/src/router_config.dart';
