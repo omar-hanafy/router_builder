@@ -1,0 +1,8 @@
+tags:
+  generator:
+    # Generator tests use build_test, which needs the Dart VM runner
+    # (it calls Isolate.packageConfig). That is unavailable under `flutter test`,
+    # so these tests are skipped by default and run explicitly with the Dart
+    # runner:
+    #   dart test --run-skipped test/generator/
+    skip: "build_test needs the Dart VM runner; run: dart test --run-skipped test/generator/"

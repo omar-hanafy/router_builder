@@ -6,3 +6,6 @@ build/
 .metadata
 *.iml
 pubspec.lock
+
+# Internal planning and design docs (not useful to package consumers).
+docs/

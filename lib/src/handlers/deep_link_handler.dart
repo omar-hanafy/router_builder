@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:router_builder/models/route_info.dart';
+import 'package:router_builder/src/models/route_info.dart';
 
 /// Abstract base class for handling deep links with custom logic.
 ///
@@ -65,6 +65,7 @@ abstract class DeepLinkHandler<T extends Object?> {
   T? createAction(Uri uri, RouteInfo route);
 }
 
+/// Convenience utilities for working with path segments when handling deep links.
 extension DeepLinkHandlerUriExtension on Uri {
   /// Helper: extract the last segment as a generic id.
   /// Useful for simple '/.../:id' patterns.

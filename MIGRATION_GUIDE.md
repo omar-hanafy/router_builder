@@ -1,335 +1,373 @@
-# Router Builder - Deep Link Migration Guide
+# Router Builder - Migration Guide
 
-## Overview
+This guide collects everything you need to move between major versions of
+`router_builder`.
 
-The router_builder package now provides a unified system for handling both navigation and deep links. This guide explains how to migrate from the old `DeepLinkRegistry` system to the new integrated approach.
+**How it is organized**
 
-## What's Changed
+- The newest migration comes first. Older ones follow, then a historical
+  appendix.
+- Each migration has the same shape: **What changed -> Automated codemods ->
+  Manual steps -> Regenerate -> Verify**.
+- "Automated codemods" are mechanical, safe text replacements applied by a
+  script in `tool/`. "Manual steps" are the changes that need your judgement;
+  the script never touches them.
+- A reusable skeleton lives at the bottom (["Template for future
+  migrations"](#template-for-future-migrations)) so every release documents its
+  upgrade path the same way.
 
-### Before (Old System)
-- Define routes with `@RT()` annotation
-- Create separate `DeepLinkHandler` classes
-- Register handlers with RegExp patterns in `action_registry.dart`
-- Multiple files and registrations required
+---
 
-### After (New System)
-- Define routes with `@RT()` annotation (same as before)
-- Optionally add `deepLinkHandler` to RouteInfo for complex cases
-- Simple navigation uses `deepLinkNames` list
-- Everything defined in one place!
+## v2 -> v3
 
-## Migration Examples
+v3 makes one idea central: **all cascading route behavior lives in a single
+`RoutePolicy`.** The flat behavioral parameters and getters that v2 carried on
+`RouteInfo` and `RouteArgs` are gone; you set behavior through `policy:` and read
+it back through resolved getters that are always non-null.
 
-### Example 1: Simple Navigation Deep Link
+### What changed
 
-**Before:**
+- **One `RoutePolicy` (9 fields).** `mustBeAuthorized`, `duplicateBehavior`,
+  `pushGlobally`, `isPopupRoute`, `visibleNavBar`, `isTopLevelOnly`,
+  `shouldReplaceAll`, `deepLinkAllowed`, `deepLinkPushGlobally`. Resolution folds
+  `args.policy` over `route.policy` over `RouterBuilderConfig.defaults`, then
+  applies branch/redirect structural constraints last.
+- **`isGlobalOnly` is now `pushGlobally`** everywhere.
+- **`RouteArgs` has one constructor** (the private clone is gone) and **`isIdSlug`
+  is removed**. Detect a slug-vs-id from the value at the gate.
+- **Encapsulated layout.** Import only
+  `package:router_builder/router_builder.dart`. Deep imports
+  (`package:router_builder/models/...`) and `models/models.dart` no longer exist.
+- **Generator entrypoint and output changed.** `build.yaml` imports
+  `package:router_builder/builder.dart`; generated output defaults to
+  `lib/routes.g.dart` with classes `Routes` and `RoutesHelper` (was
+  `lib/route_info_helper.dart`, `MyRoutes`, `RouteInfoHelper`). You can pin the
+  old names/path with builder options.
+- **Deep-link host matching is exact-or-suffix** (was substring). `myapp.com`
+  now matches `myapp.com` and `*.myapp.com`, but not `evil-myapp.com`.
+- **Deep-link key conflicts fail the build** by default (`fail_on_conflict`).
+- **Builder typedefs unified** to `(BuildContext, RouteArgs?)`.
+- **`RouterBuilderConfig.defaults` is read-only**; configure with
+  `setDefaults(RoutePolicy)` or `@RTConfig` + `RoutesHelper.installDefaults()`.
+
+### Step 0: bump the dependency
+
+```yaml
+dependencies:
+  router_builder: ^3.0.0
+```
+
+```bash
+flutter pub get
+```
+
+### Step 1: run the automated codemods
+
+A script applies the mechanical, low-risk replacements so you can focus on the
+parts that need thought. Copy `tool/migrate_to_v3.sh` from the `router_builder`
+repository into your app (or run it straight from your pub cache), then, from
+your app root:
+
+```bash
+# DRY-RUN (default): prints a diff, edits nothing
+tool/migrate_to_v3.sh lib
+
+# apply once you have reviewed the diff
+tool/migrate_to_v3.sh --write lib
+```
+
+Run it on a clean git tree so the diff is easy to review. It is idempotent.
+
+It applies only the changes that are always safe:
+
+- removes `isIdSlug: true|false` (the field/param is gone)
+- `MyRoutes` -> `Routes`
+- `RouteInfoHelper` -> `RoutesHelper`
+- `route_info_helper.dart` -> `routes.g.dart` (in imports)
+- deep `router_builder` imports -> the single barrel
+  `package:router_builder/router_builder.dart` (and collapses the duplicate
+  barrel imports that produces)
+
+It does **not** touch anything that needs judgement. Those are the manual steps
+below, and your code will not compile until you do them.
+
+### Step 2: manual changes
+
+#### 2a. Flat behavioral params -> `policy:`
+
+This is the big one. Move every flat behavioral argument into a `RoutePolicy`.
+
+**`RouteInfo` (v2 flat param -> v3 `RoutePolicy` field):**
+
+| v2 flat param on `RouteInfo` | v3 |
+|------------------------------|----|
+| `isGlobalOnly`     | `policy: RoutePolicy(pushGlobally: ...)` |
+| `mustBeAuthorized` | `policy: RoutePolicy(mustBeAuthorized: ...)` |
+| `visibleNavBar`    | `policy: RoutePolicy(visibleNavBar: ...)` |
+| `isPopupRoute`     | `policy: RoutePolicy(isPopupRoute: ...)` |
+| `shouldReplaceAll` | `policy: RoutePolicy(shouldReplaceAll: ...)` |
+| `isTopLevelOnly`   | `policy: RoutePolicy(isTopLevelOnly: ...)` |
+| `duplicateBehavior`| `policy: RoutePolicy(duplicateBehavior: ...)` |
+| `deepLinkAllowed`  | `policy: RoutePolicy(deepLinkAllowed: ...)` |
+
+**`RouteArgs` (v2 flat param -> v3 `RoutePolicy` field):**
+
+| v2 flat param on `RouteArgs` | v3 |
+|------------------------------|----|
+| `pushGlobally`     | `policy: RoutePolicy(pushGlobally: ...)` |
+| `mustBeAuthorized` | `policy: RoutePolicy(mustBeAuthorized: ...)` |
+| `duplicateBehavior`| `policy: RoutePolicy(duplicateBehavior: ...)` |
+| `isIdSlug`         | removed (detect from the value - see 2c) |
+
+Before:
+
 ```dart
-// In product_screen.dart
 @RT()
-static final route = RouteInfo(
-  'product',
-  builder: _builder,
+static const admin = RouteInfo(
+  'admin',
+  child: AdminPanel(),
+  isGlobalOnly: true,
+  mustBeAuthorized: true,
+  isTopLevelOnly: true,
 );
 
-// In deep_link_handlers/product_handler.dart
-class ProductDeepLinkHandler extends DeepLinkHandler {
-  @override
-  RegExp get pattern => RegExp(r'^/product/(\d+)');
-  
-  @override
-  DeferredAction<dynamic>? handle(Uri uri, Match match) {
-    final productId = match.group(1);
-    return NavigateToRouteAction(
-      route: ProductScreen.route,
-      routeArgs: RouteArgs(ProductScreen.route, id: productId),
-    );
-  }
-}
+RouteArgs(Routes.login, pushGlobally: true, mustBeAuthorized: false);
+```
 
-// In action_registry.dart
-void _registerDeepLinkHandlers() {
-  deepLinkRegistry.register(ProductDeepLinkHandler());
+After:
+
+```dart
+@RT()
+static const admin = RouteInfo(
+  'admin',
+  child: AdminPanel(),
+  policy: RoutePolicy(
+    pushGlobally: true,
+    mustBeAuthorized: true,
+    isTopLevelOnly: true,
+  ),
+);
+
+RouteArgs(
+  Routes.login,
+  policy: const RoutePolicy(pushGlobally: true, mustBeAuthorized: false),
+);
+```
+
+Common shapes have presets: `RoutePolicy.global` (`pushGlobally: true`),
+`RoutePolicy.public` (`mustBeAuthorized: false`), `RoutePolicy.popup`
+(`isPopupRoute: true`).
+
+#### 2b. Read-site getters
+
+v2 behavioral getters were often nullable; v3 resolved getters are non-null, so
+drop the `?? default` and rename `isGlobalOnly`:
+
+| v2 read | v3 read |
+|---------|---------|
+| `route.isGlobalOnly ?? false` | `route.pushGlobally` |
+| `route.mustBeAuthorized ?? true` | `route.mustBeAuthorized` |
+| `route.duplicateBehavior ?? DuplicateRouteBehavior.duplicate` | `route.duplicateBehavior` |
+| `(route.isGlobalOnly ?? false) \|\| args.effectivePushGlobally` | `args.effectivePushGlobally` |
+
+`RouteArgs` keeps its `effectiveX` getters (`effectivePushGlobally`,
+`effectiveMustBeAuthorized`, `effectiveIsPopupRoute`,
+`effectiveDuplicateBehavior`, and the rest), now backed by the merged policy.
+
+#### 2c. `isIdSlug` is gone
+
+There is no flag any more. Decide at the gate from the value itself:
+
+```dart
+final raw = args.id;
+final isNumericId = int.tryParse(raw ?? '') != null;
+// or carry an explicit field on a RouteArgs subclass if you need to remember it
+```
+
+#### 2d. Global defaults
+
+`RouterBuilderConfig.setDefaults(...)` no longer takes named params. Pass a
+`RoutePolicy`, or declare an `@RTConfig` and install it:
+
+```dart
+// Option A: imperative
+RouterBuilderConfig.setDefaults(
+  const RoutePolicy(mustBeAuthorized: false, deepLinkAllowed: true),
+);
+
+// Option B: declarative (preferred) - exactly one per package
+@RTConfig()
+const appRoutePolicy = RoutePolicy(mustBeAuthorized: false, deepLinkAllowed: true);
+
+void main() {
+  RoutesHelper.installDefaults(); // applies appRoutePolicy as global defaults
+  runApp(const MyApp());
 }
 ```
 
-**After:**
+#### 2e. `RouteArgs` subclasses
+
+If you subclassed `RouteArgs` and forwarded flat behavioral params via
+`super.*`, forward `super.policy` instead:
+
 ```dart
-// In product_screen.dart (ONLY HERE!)
+// v2
+class DialogArgs extends RouteArgs {
+  const DialogArgs(super.route, {super.pushGlobally});
+}
+
+// v3
+class DialogArgs extends RouteArgs {
+  const DialogArgs(super.route, {super.policy});
+}
+```
+
+#### 2f. `build.yaml`
+
+```yaml
+builders:
+  generate_route_info_helper:
+    import: "package:router_builder/builder.dart"   # was the generator path
+    builder_factories: [ "generateRouteInfoHelperBuilder" ]
+    build_extensions: { r'$package$': [ "lib/routes.g.dart" ] }
+    auto_apply: dependents
+    build_to: source
+```
+
+To keep the old names/path instead of renaming call sites, set builder options
+(`route_class_name`, `helper_class_name`, `output`). If you change `output`,
+change `build_extensions` to the same path.
+
+#### 2g. Deep links
+
+- **Allowed hosts:** matching is now exact-or-suffix. Audit your allowed-hosts
+  list; a host that only worked because of v2 substring matching will now be
+  rejected.
+- **Key conflicts fail the build.** If two routes share a deep-link key (name,
+  first path segment, or a `deepLinkNames` alias), the build now errors. Rename
+  the route, change its path, or adjust `deepLinkNames`. To downgrade to a
+  warning, set the builder option `fail_on_conflict: false`.
+
+### Step 3: regenerate
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+```
+
+### Step 4: verify
+
+```bash
+dart analyze   # or: flutter analyze
+```
+
+Fix any remaining flat-param call sites the analyzer flags (those are the manual
+2a/2b changes the script intentionally left for you).
+
+### Quick reference (v2 -> v3)
+
+| v2 | v3 |
+|----|----|
+| `RouteInfo('x', mustBeAuthorized: false, isGlobalOnly: true)` | `RouteInfo('x', policy: RoutePolicy(mustBeAuthorized: false, pushGlobally: true))` |
+| `RouteArgs(r, pushGlobally: true, duplicateBehavior: ...)` | `RouteArgs(r, policy: RoutePolicy(pushGlobally: true, duplicateBehavior: ...))` |
+| `route.isGlobalOnly ?? false` | `route.pushGlobally` |
+| `RouteArgs(..., isIdSlug: true)` | detect via `int.tryParse(args.id ?? '')`, or a `RouteArgs` subclass field |
+| `DialogArgs(... super.pushGlobally ...)` | `DialogArgs(... super.policy ...)` |
+| `import 'package:router_builder/models/models.dart'` | `import 'package:router_builder/router_builder.dart'` |
+| `import 'route_info_helper.dart'`; `MyRoutes.x` / `RouteInfoHelper` | `import 'routes.g.dart'`; `Routes.x` / `RoutesHelper` (or pin old names via builder options) |
+| build.yaml imports the generator path | imports `package:router_builder/builder.dart` |
+| deep-link allowed hosts (substring match) | exact-or-suffix; verify the list |
+| `RouterBuilderConfig.setDefaults(mustBeAuthorized: false)` | `setDefaults(const RoutePolicy(mustBeAuthorized: false))`, or `@RTConfig` + `RoutesHelper.installDefaults()` |
+
+---
+
+## Appendix: v0.x -> v1.0 (unified deep links) - historical
+
+v1.0 replaced the separate `DeepLinkRegistry` (RegExp patterns registered in an
+`action_registry.dart`) with deep links defined directly on the route. Routes
+became the single source of truth.
+
+Before: a route plus a separate `DeepLinkHandler` subclass with a `RegExp`
+pattern, registered globally.
+
+After: declare the path and aliases on the route, and only add a
+`deepLinkHandler` for genuinely custom logic:
+
+```dart
 @RT()
-static final route = RouteInfo(
+static final product = RouteInfo(
   'product',
   path: 'product/:id',
-  deepLinkNames: ['item', 'p'], // Optional aliases
+  deepLinkNames: ['item', 'p'], // optional aliases
   builder: _builder,
 );
 ```
 
-That's it! The system automatically handles:
-- Pattern matching from the path
-- Parameter extraction (`:id`)
-- Navigation action creation
+For complex cases, attach a handler and read params off the URI:
 
-### Example 2: Complex Deep Link with Custom Logic
-
-**Before:**
 ```dart
-// Multiple files for referral system...
-class ReferralDeepLinkHandler extends DeepLinkHandler {
-  @override
-  RegExp get pattern => RegExp(r'^/referral/([A-Z0-9]+)');
-  
-  @override
-  DeferredAction<dynamic>? handle(Uri uri, Match match) {
-    final code = match.group(1);
-    return SaveReferralCodeAction(code: code);
-  }
-}
-```
-
-**After:**
-```dart
-// In referral_screen.dart
 @RT()
-static final route = RouteInfo(
+static final referral = RouteInfo(
   'referral',
   path: 'referral/:code',
   deepLinkHandler: const ReferralDeepLinkHandler(),
-  builder: _builder, // Still has UI for manual entry
-);
-
-// First, create an app-wide base handler type (in a shared file)
-abstract class AppDeepLinkHandler extends DeepLinkHandler<DeferredAction<dynamic>> {}
-
-// Then use it for all handlers
-class ReferralDeepLinkHandler extends AppDeepLinkHandler {
-  const ReferralDeepLinkHandler();
-  
-  @override
-  bool canHandle(Uri uri) => true;
-  
-  @override
-  DeferredAction<dynamic>? createAction(Uri uri, RouteInfo route) {
-    final code = uri.pathSegments.last;
-    return SaveReferralCodeAction(code: code);
-  }
-}
-```
-
-### Example 3: Multi-Action Deep Links
-
-**Before:**
-```dart
-class JobDeepLinkHandler extends DeepLinkHandler {
-  @override
-  RegExp get pattern => RegExp(r'^/job');
-  
-  @override
-  DeferredAction<dynamic>? handle(Uri uri, Match match) {
-    final jobId = uri.pathSegments[1];
-    final action = uri.queryParameters['action'];
-    
-    switch (action) {
-      case 'apply':
-        return ApplyToJobAction(
-          jobId: jobId,
-          coverLetter: uri.queryParameters['coverLetter'],
-        );
-      case 'save':
-        return SaveJobAction(jobId: jobId);
-      default:
-        return ViewJobAction(jobId: jobId);
-    }
-  }
-}
-```
-
-**After:**
-```dart
-@RT()
-static final route = RouteInfo(
-  'job',
-  path: 'job/:id',
-  deepLinkHandler: const JobDeepLinkHandler(),
-  deepLinkNames: ['career', 'opportunity'], // Aliases
   builder: _builder,
 );
 
-class JobDeepLinkHandler extends AppDeepLinkHandler {
-  const JobDeepLinkHandler();
-  
+class ReferralDeepLinkHandler extends DeepLinkHandler<MyAction> {
+  const ReferralDeepLinkHandler();
+
   @override
   bool canHandle(Uri uri) => true;
-  
+
   @override
-  DeferredAction<dynamic>? createAction(Uri uri, RouteInfo route) {
-    final jobId = uri.pathSegments.last;
-    final action = uri.queryParameters['action'];
-    
-    switch (action) {
-      case 'apply':
-        return ApplyToJobAction(
-          jobId: jobId,
-          coverLetter: uri.queryParameters['coverLetter'],
-        );
-      case 'save':
-        return SaveJobAction(jobId: jobId);
-      default:
-        return ViewJobAction(jobId: jobId);
-    }
-  }
+  MyAction? createAction(Uri uri, RouteInfo route) =>
+      SaveReferralCodeAction(code: uri.pathSegments.last);
 }
 ```
 
-## Deep Link Resolver
+Cleanup after migrating to v1.0: delete the old registry, the RegExp handler
+implementations, their registrations, and any `toDeepLinkAction()` URI
+extension. Path params (`:id`) and conflict detection are handled for you at
+build time.
 
-Create a simple resolver in your app to use the enhanced deep link map:
+> If you are coming from v0.x, do the v1.0 migration first, then follow the
+> [v2 -> v3](#v2---v3) section above. (The v1.0-era examples used the old
+> `RouteInfoHelper` / `route_info_helper.dart` names; v3 renamed those to
+> `RoutesHelper` / `routes.g.dart`.)
 
-```dart
-// lib/core/router_config/services/deep_link_resolver.dart
-import 'package:router_builder/router_builder.dart';
-import 'package:saber/core/deferred_actions/models/deferred_action.dart';
-import 'package:saber/route_info_helper.dart'; // Generated file
+---
 
-class DeepLinkResolver {
-  const DeepLinkResolver();
+## Template for future migrations
 
-  DeferredAction<dynamic>? resolve(Uri uri) {
-    final pathSegments = uri.pathSegments;
-    if (pathSegments.isEmpty) return null;
+When cutting the next major version, prepend a section in this shape:
 
-    // Try to find route by first segment
-    final routeKey = pathSegments.first;
-    final routeInfo = RouteInfoHelper.deepLinkMap[routeKey];
-    
-    if (routeInfo == null) {
-      print('No route found for key: $routeKey');
-      return null;
-    }
+```markdown
+## vN-1 -> vN
 
-    // Check if route has custom handler
-    if (routeInfo.deepLinkHandler != null) {
-      return routeInfo.deepLinkHandler!.createAction(uri, routeInfo);
-    }
+### What changed
+- Bullet the breaking changes, each with the old -> new in one line.
 
-    // Default navigation action
-    final routeArgs = _buildRouteArgs(routeInfo, uri);
-    return NavigateToRouteAction(
-      route: routeInfo,
-      routeArgs: routeArgs,
-    );
-  }
+### Step 0: bump the dependency
+The pubspec change + `flutter pub get`.
 
-  RouteArgs _buildRouteArgs(RouteInfo routeInfo, Uri uri) {
-    String? id;
-    if (uri.pathSegments.length > 1) {
-      id = uri.pathSegments[1];
-    }
+### Step 1: run the automated codemods
+Point at `tool/migrate_to_vN.sh` (dry-run by default, `--write` to apply).
+List exactly what it rewrites - only the mechanical, always-safe changes.
 
-    return RouteArgs(
-      routeInfo,
-      id: id,
-      queryParams: uri.queryParameters,
-      isFromDeeplink: true,
-      pushGlobally: true,
-    );
-  }
-}
+### Step 2: manual changes
+The changes that need judgement, with before/after for each. Be explicit that
+the script does not touch these and the code will not compile until they are done.
+
+### Step 3: regenerate
+`dart run build_runner build --delete-conflicting-outputs` (if codegen changed).
+
+### Step 4: verify
+`dart analyze` / `flutter analyze`, and run the tests.
+
+### Quick reference (vN-1 -> vN)
+A compact old -> new table.
 ```
 
-## Router Integration
-
-Update your GoRouter configuration:
-
-```dart
-// Before
-onEnter: (context, currentState, nextState, router) async {
-  if (nextState.uri.isOurDeepLink) {
-    final action = nextState.uri.toDeepLinkAction(); // Old registry
-    final handled = await ref.executeOrDefer(action, context: context);
-    return !handled;
-  }
-  return true;
-}
-
-// After
-onEnter: (context, currentState, nextState, router) async {
-  if (nextState.uri.isOurDeepLink) {
-    final resolver = const DeepLinkResolver();
-    final action = resolver.resolve(nextState.uri);
-    
-    if (action != null) {
-      final result = await ref.executeOrDefer(action, context: context);
-      return !result.isSuccess && !result.isDeferred;
-    }
-  }
-  return true;
-}
-```
-
-## Key Benefits
-
-1. **Single Source of Truth**: Routes and deep links defined together
-2. **Less Code**: Remove entire DeepLinkRegistry subsystem
-3. **Type Safety**: No RegExp strings to maintain
-4. **Build-Time Validation**: Conflicts detected during code generation
-5. **Better Organization**: Handlers live with their routes
-
-## Conflict Resolution
-
-If you see a conflict error during build:
-
-```
-[SEVERE] Deep Link Key Conflict Detected!
-  Key: 'profile'
-  Used by: UserScreen.route, ProfileScreen.route
-```
-
-Resolution options:
-1. Change one route's name
-2. Use a different path
-3. Use unique deepLinkNames
-
-## Advanced Features
-
-### Conditional Handling
-
-```dart
-class PremiumContentHandler extends DeepLinkHandler {
-  const PremiumContentHandler();
-  
-  @override
-  bool canHandle(Uri uri) {
-    // Skip handling for specific conditions
-    return uri.queryParameters['preview'] != 'true';
-  }
-  
-  @override
-  DeferredAction<dynamic>? createAction(Uri uri, RouteInfo route) {
-    return ViewPremiumContentAction(
-      contentId: uri.pathSegments.last,
-      requiredConditions: {AppConditions.hasSubscription},
-    );
-  }
-}
-```
-
-### Path Parameter Patterns
-
-The system automatically extracts parameters from paths:
-- `profile/:id` → Extracts `id` parameter
-- `shop/:category/:productId` → Extracts both parameters
-- `search/*query` → Captures remaining path
-
-## Cleanup Checklist
-
-After migration, delete:
-- [ ] `deep_link_registry.dart`
-- [ ] All `DeepLinkHandler` implementations (except new ones)
-- [ ] Handler registrations in `action_registry.dart`
-- [ ] `toDeepLinkAction()` extension on Uri
-
-## Need Help?
-
-- Check generated `route_info_helper.dart` for the `deepLinkMap`
-- Use `flutter pub run build_runner build` to regenerate
-- Conflicts are reported during build with clear guidance
+Keep each `tool/migrate_to_vN.sh` focused on the safe, mechanical edits
+(renames, removed flags, import moves). Leave structural rewrites to the manual
+steps - a wrong automated edit is worse than a documented manual one.

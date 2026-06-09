@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart';
-import 'package:router_builder/models/models.dart';
+import 'package:router_builder/router_builder.dart';
 
 /// Represents a successful deep link resolution.
 @immutable
 class DeepLinkMatch {
+  /// Creates a deep link match with the resolved [route] and [args].
   const DeepLinkMatch({required this.route, required this.args});
 
   /// Route matched from the deep link.
@@ -15,6 +16,7 @@ class DeepLinkMatch {
 
 /// Utility that normalises incoming URIs and matches them against app routes.
 class DeepLinkMatcher {
+  /// Creates a stateless deep link matcher.
   const DeepLinkMatcher();
 
   /// Convert a deep link URI into an internal, path-only URI.
@@ -30,13 +32,18 @@ class DeepLinkMatcher {
       return incoming;
     }
 
-    final lowerHosts = hosts.map((host) => host.toLowerCase());
+    final lowerHosts = hosts
+        .map((host) => host.toLowerCase())
+        .toList(growable: false);
     final scheme = incoming.scheme.toLowerCase();
+    final host = incoming.host.toLowerCase();
     final params =
         incoming.queryParameters.isEmpty ? null : incoming.queryParameters;
 
     if ((scheme == 'http' || scheme == 'https') &&
-        lowerHosts.any((host) => incoming.host.toLowerCase().contains(host))) {
+        lowerHosts.any(
+          (allowed) => host == allowed || host.endsWith('.$allowed'),
+        )) {
       final path = incoming.path.isEmpty ? '/' : incoming.path;
       return Uri(path: path, queryParameters: params);
     }
@@ -101,9 +108,9 @@ class DeepLinkMatcher {
   }
 
   RouteArgs _buildArgs(RouteInfo route, Uri uri, Uri? original) {
+    final pushGlobally = route.resolvedPolicy.deepLinkPushGlobally!;
     return RouteArgs.fromUri(route, uri).copyWith(
-      pushGlobally: true,
-      isFromDeeplink: true,
+      policy: RoutePolicy(pushGlobally: pushGlobally),
       object: original ?? uri,
     );
   }

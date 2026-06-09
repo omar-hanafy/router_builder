@@ -1,7 +1,12 @@
 builders:
   generate_route_info_helper:
-    import: "package:router_builder/generators/generate_route_info_helper.dart"
+    import: "package:router_builder/builder.dart"
     builder_factories: [ "generateRouteInfoHelperBuilder" ]
-    build_extensions: { r'$package$': [ "lib/route_info_helper.dart" ] }
+    build_extensions: { r'$package$': [ "lib/routes.g.dart" ] }
     auto_apply: dependents
     build_to: source
+# Builder options (override via a build.yaml in the consuming package):
+# route_class_name: Routes
+# helper_class_name: RoutesHelper
+# output: lib/routes.g.dart        # if changed, also update build_extensions above
+# fail_on_conflict: true
