@@ -32,13 +32,17 @@ class DeepLinkMatcher {
       return incoming;
     }
 
-    final lowerHosts = hosts.map((host) => host.toLowerCase());
+    final lowerHosts =
+        hosts.map((host) => host.toLowerCase()).toList(growable: false);
     final scheme = incoming.scheme.toLowerCase();
+    final host = incoming.host.toLowerCase();
     final params =
         incoming.queryParameters.isEmpty ? null : incoming.queryParameters;
 
     if ((scheme == 'http' || scheme == 'https') &&
-        lowerHosts.any((host) => incoming.host.toLowerCase().contains(host))) {
+        lowerHosts.any(
+          (allowed) => host == allowed || host.endsWith('.$allowed'),
+        )) {
       final path = incoming.path.isEmpty ? '/' : incoming.path;
       return Uri(path: path, queryParameters: params);
     }
