@@ -12,6 +12,11 @@ Router Builder simplifies Flutter route management and deep linking through code
 - 🏷️ **Localized Titles**: Optional `title` callback for per-route titles that react to locale changes
 - 👮 **Policy-Driven**: Flexible control over auth and duplication logic (Global -> Route -> Call)
 
+> **Upgrading from v2?** See the v2 -> v3 table in `MIGRATION_GUIDE.md`. Key
+> changes: one `RoutePolicy` for all behavior, `import
+> 'package:router_builder/router_builder.dart'` only, generated `Routes` /
+> `RoutesHelper` in `routes.g.dart`.
+
 ## Getting Started
 
 ### Installation
@@ -63,17 +68,17 @@ flutter pub run build_runner build --delete-conflicting-outputs
 3. **Use generated helpers** in your router:
 
 ```dart
-import 'route_info_helper.dart'; // Generated file
+import 'routes.g.dart'; // Generated file
 
 // Access routes
-final homeRoute = MyRoutes.home;
-final profileRoute = MyRoutes.profile;
+final homeRoute = Routes.home;
+final profileRoute = Routes.profile;
 
 // Get route by name
-final route = RouteInfoHelper.fromName('profile');
+final route = RoutesHelper.fromName('profile');
 
 // Access deep link map
-final deepLinkMap = RouteInfoHelper.deepLinkMap;
+final deepLinkMap = RoutesHelper.deepLinkMap;
 ```
 
 ### RouteArgs conveniences
@@ -82,7 +87,7 @@ final deepLinkMap = RouteInfoHelper.deepLinkMap;
 - `fromUri`: Build args from a `Uri` and a `RouteInfo` template.
 
 ```dart
-final args = RouteArgs.fromUri(MyRoutes.profile, Uri.parse('/profile/123?tab=posts'));
+final args = RouteArgs.fromUri(Routes.profile, Uri.parse('/profile/123?tab=posts'));
 print(args.id); // '123'
 print(args.queryParams); // { 'tab': 'posts' }
 print(args.pathParams); // { }
@@ -95,7 +100,7 @@ You can capture an intended navigation and pass it as a resume intent to another
 ```dart
 // Intended destination (protected)
 final intended = RouteArgs(
-  MyRoutes.profile,
+  Routes.profile,
   id: '123',
   queryParams: {'tab': 'posts'},
   object: UserPreview(...),
@@ -105,7 +110,7 @@ final intended = RouteArgs(
 final isAllowed = authService.isLoggedIn;
 if (!isAllowed) {
   // Navigate to auth with a resume intent
-  final authArgs = RouteArgs(MyRoutes.auth, resumeTo: intended);
+  final authArgs = RouteArgs(Routes.auth, resumeTo: intended);
   navigation.push(authArgs);
   return; // Block original navigation
 }
@@ -185,6 +190,23 @@ RouterBuilderConfig.setDefaults(
 );
 ```
 
+### Global defaults (`@RTConfig`)
+
+Declare one app-wide policy and install it in `main()`:
+
+```dart
+@RTConfig()
+const appRoutePolicy = RoutePolicy(mustBeAuthorized: false, deepLinkAllowed: true);
+
+void main() {
+  RoutesHelper.installDefaults(); // applies appRoutePolicy as global defaults
+  runApp(const MyApp());
+}
+```
+
+Per-route and per-call overrides win over these defaults; structural constraints
+(branch/redirect) always win last.
+
 ### 2. Route Definition Overrides
 
 Override policies for specific routes:
@@ -208,7 +230,7 @@ Override policies dynamically during navigation:
 ```dart
 // Force a new instance even if the route usually refreshes
 RouteArgs(
-  MyRoutes.login,
+  Routes.login,
   policy: const RoutePolicy(
     duplicateBehavior: DuplicateRouteBehavior.duplicate,
   ),
@@ -216,7 +238,7 @@ RouteArgs(
 
 // Bypass auth check for specific scenarios
 RouteArgs(
-  MyRoutes.debug,
+  Routes.debug,
   policy: const RoutePolicy(mustBeAuthorized: false),
 ).go(context);
 ```
@@ -228,7 +250,7 @@ deprecated. Prefer `policy: RoutePolicy(...)` for new code.
 
 Deprecated route-level fields:
 - `RouteInfo.mustBeAuthorized`
-- `RouteInfo.isGlobalOnly`
+- `RouteInfo.pushGlobally` (resolved; set via `policy: RoutePolicy(pushGlobally: ...)`)
 - `RouteInfo.isPopupRoute`
 - `RouteInfo.duplicateBehavior`
 
