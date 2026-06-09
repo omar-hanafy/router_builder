@@ -1,5 +1,25 @@
 # Router Builder - Deep Link Migration Guide
 
+## Migrating from v2 to v3
+
+| v2 | v3 |
+|----|----|
+| `RouteInfo('x', mustBeAuthorized: false, isGlobalOnly: true)` | `RouteInfo('x', policy: RoutePolicy(mustBeAuthorized: false, pushGlobally: true))` |
+| `RouteArgs(r, pushGlobally: true, duplicateBehavior: ...)` | `RouteArgs(r, policy: RoutePolicy(pushGlobally: true, duplicateBehavior: ...))` |
+| `route.isGlobalOnly ?? false` | `route.pushGlobally` |
+| `route.visibleNavBar` / `route.shouldReplaceAll` | unchanged (resolved getters) |
+| `(route.isGlobalOnly ?? false) \|\| args.effectivePushGlobally` | `args.effectivePushGlobally` |
+| `DialogArgs(... super.pushGlobally ...)` | `DialogArgs(... super.policy ...)` |
+| `import 'package:router_builder/models/models.dart'` | `import 'package:router_builder/router_builder.dart'` |
+| `import 'route_info_helper.dart'`; `MyRoutes.x` / `RouteInfoHelper` | `import 'routes.g.dart'`; `Routes.x` / `RoutesHelper` (or pin old names via builder options) |
+| build.yaml imports the generator path | imports `package:router_builder/builder.dart` |
+| `RouteArgs(..., isIdSlug: true)` | detect via `int.tryParse(args.id ?? '')`, or a `RouteArgs` subclass field |
+| deep-link allowed hosts (substring match) | verify the list; matching is now exact-or-suffix |
+| `RouterBuilderConfig.setDefaults(mustBeAuthorized: false)` | `RouterBuilderConfig.setDefaults(const RoutePolicy(mustBeAuthorized: false))`, or `@RTConfig` + `RoutesHelper.installDefaults()` |
+
+Global defaults: declare one `@RTConfig() const appRoutePolicy = RoutePolicy(...)`
+and call `RoutesHelper.installDefaults()` once at the start of `main()`.
+
 ## Overview
 
 The router_builder package now provides a unified system for handling both navigation and deep links. This guide explains how to migrate from the old `DeepLinkRegistry` system to the new integrated approach.
