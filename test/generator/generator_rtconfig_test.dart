@@ -48,7 +48,7 @@ void main() {
       readerWriter: await reader(),
       outputs: {
         'router_builder|lib/routes.g.dart': decodedMatches(
-          contains('RouterBuilderConfig.setDefaults(appRoutePolicy)'),
+          matches(RegExp(r'RouterBuilderConfig\.setDefaults\(_i\d+\.appRoutePolicy\)')),
         ),
       },
     );

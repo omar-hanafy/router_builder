@@ -311,6 +311,8 @@ class GenerateRouteInfoHelperBuilder implements Builder {
   }
 
   String _generateCode(_Collected collected) {
+    final prefixes = _assignImportPrefixes(collected);
+    _qualifyRefs(collected, prefixes);
     final routes = collected.routes;
     final buffer =
         StringBuffer()
@@ -320,17 +322,16 @@ class GenerateRouteInfoHelperBuilder implements Builder {
           ..writeln()
           ..writeln('// ignore_for_file: type=lint')
           ..writeln();
-    _writeImports(buffer, collected);
+    _writeImports(buffer, prefixes);
     _writeRoutesClass(buffer, routes);
     _writeHelperClass(buffer, collected);
     return buffer.toString();
   }
 
-  void _writeImports(StringBuffer buffer, _Collected collected) {
-    final uris = <String>{
-      'package:dart_helper_utils/dart_helper_utils.dart',
-      'package:router_builder/router_builder.dart',
-    };
+  /// Assigns a stable import prefix (_i0, _i1, ...) to every consumer/enum
+  /// library so generated references never collide with generated identifiers.
+  Map<String, String> _assignImportPrefixes(_Collected collected) {
+    final uris = <String>{};
     for (final r in collected.routes) {
       uris.add(r['importUri'] as String);
       final bp = r['branchParentType_import'];
@@ -339,8 +340,43 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     for (final c in collected.configs) {
       uris.add(c['importUri'] as String);
     }
-    for (final uri in uris.toList()..sort()) {
-      buffer.writeln("import '$uri';");
+    final sorted = uris.toList()..sort();
+    final prefixes = <String, String>{};
+    for (var i = 0; i < sorted.length; i++) {
+      prefixes[sorted[i]] = '_i$i';
+    }
+    return prefixes;
+  }
+
+  /// Rewrites route/config refs and branch enum references to be import-prefixed.
+  void _qualifyRefs(_Collected collected, Map<String, String> prefixes) {
+    for (final r in collected.routes) {
+      final prefix = prefixes[r['importUri'] as String]!;
+      r['ref'] = '$prefix.${r['ref']}';
+      if (r['kind'] == 'branch') {
+        final bpImport = r['branchParentType_import'] as String?;
+        final bpPrefix = bpImport == null ? null : prefixes[bpImport];
+        if (bpPrefix != null) {
+          r['branchParentType'] = '$bpPrefix.${r['branchParentType']}';
+          r['branchParentType_type'] =
+              '$bpPrefix.${r['branchParentType_type']}';
+        }
+      }
+    }
+    for (final c in collected.configs) {
+      final prefix = prefixes[c['importUri'] as String]!;
+      c['ref'] = '$prefix.${c['ref']}';
+    }
+  }
+
+  void _writeImports(StringBuffer buffer, Map<String, String> prefixes) {
+    buffer
+      ..writeln("import 'package:dart_helper_utils/dart_helper_utils.dart';")
+      ..writeln("import 'package:router_builder/router_builder.dart';");
+    final entries = prefixes.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    for (final e in entries) {
+      buffer.writeln("import '${e.key}' as ${e.value};");
     }
     buffer.writeln();
   }

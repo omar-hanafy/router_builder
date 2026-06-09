@@ -67,11 +67,11 @@ void main() {
         'router_builder|lib/routes.g.dart': decodedMatches(
           allOf(<Matcher>[
             // route constants (standard, top-level, branch, redirect)
-            contains('RouteInfo home = AppRoutes.home'),
-            contains('RouteInfo settings = settings'),
-            contains('RouteInfo splash = AppRoutes.splashGate'),
+            matches(RegExp(r'RouteInfo home = _i\d+\.AppRoutes\.home')),
+            matches(RegExp(r'RouteInfo settings = _i\d+\.settings')),
+            matches(RegExp(r'RouteInfo splash = _i\d+\.AppRoutes\.splashGate')),
             // branch map + per-enum lists keyed by the shell enum
-            contains('Map<AppShell, Map<int?, RouteInfo>> branches'),
+            matches(RegExp(r'Map<_i\d+\.AppShell, Map<int\?, RouteInfo>> branches')),
             contains('homeBranches'),
             contains('searchBranches'),
             contains('profileBranches'),
@@ -90,7 +90,7 @@ void main() {
             contains("'product':"),
             contains("'items':"),
             // @RTConfig wiring
-            contains('RouterBuilderConfig.setDefaults(appRoutePolicy)'),
+            matches(RegExp(r'RouterBuilderConfig\.setDefaults\(_i\d+\.appRoutePolicy\)')),
           ]),
         ),
       },
