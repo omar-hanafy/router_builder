@@ -5,8 +5,8 @@ builders:
     build_extensions: { r'$package$': [ "lib/routes.g.dart" ] }
     auto_apply: dependents
     build_to: source
-options:
-  # route_class_name: Routes
-  # helper_class_name: RoutesHelper
-  # output: lib/routes.g.dart        # if changed, also update build_extensions above
-  # fail_on_conflict: true
+# Builder options (override via a build.yaml in the consuming package):
+# route_class_name: Routes
+# helper_class_name: RoutesHelper
+# output: lib/routes.g.dart        # if changed, also update build_extensions above
+# fail_on_conflict: true
