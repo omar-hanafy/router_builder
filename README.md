@@ -10,12 +10,16 @@ Router Builder simplifies Flutter route management and deep linking through code
 - ⚡ **Build-time Validation**: Detects route conflicts during generation
 - 🎯 **Simple API**: Clean, intuitive route definition syntax
 - 🏷️ **Localized Titles**: Optional `title` callback for per-route titles that react to locale changes
-- 👮 **Policy-Driven**: Flexible control over auth and duplication logic (Global -> Route -> Call)
+- 👮 **Policy-Driven**: One `RoutePolicy` for all behavior, resolved Call -> Route -> Global
+- 🗂️ **Categorized Routes**: Generated `RoutesHelper` exposes `normalRoutes`, `globalRoutes`, `popupRoutes`, `authorizedRoutes`, `redirectRoutes`, branch maps, and a `deepLinkMap`
+- 🩺 **Diagnostics**: JSON-safe `report()` on `RoutePolicy`, `RouteInfo`, and `RouteArgs`
 
-> **Upgrading from v2?** See the v2 -> v3 table in `MIGRATION_GUIDE.md`. Key
-> changes: one `RoutePolicy` for all behavior, `import
-> 'package:router_builder/router_builder.dart'` only, generated `Routes` /
-> `RoutesHelper` in `routes.g.dart`.
+> **Upgrading from v2?** See [`MIGRATION_GUIDE.md`](MIGRATION_GUIDE.md) for the
+> full v2 -> v3 guide. Key changes: one `RoutePolicy` for all behavior, a single
+> `import 'package:router_builder/router_builder.dart'`, and generated `Routes` /
+> `RoutesHelper` in `routes.g.dart`. The mechanical edits (removing `isIdSlug`,
+> `MyRoutes` -> `Routes`, import moves) are automated by `tool/migrate_to_v3.sh`
+> (dry-run by default; `--write` to apply).
 
 ## Getting Started
 
@@ -25,10 +29,10 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  router_builder: ^2.0.2
+  router_builder: ^3.0.0
 
 dev_dependencies:
-  build_runner: ^2.10.1
+  build_runner: ^2.15.0
 ```
 
 ### Basic Usage
@@ -62,7 +66,7 @@ class AppRoutes {
 2. **Run the generator**:
 
 ```bash
-flutter pub run build_runner build --delete-conflicting-outputs
+dart run build_runner build --delete-conflicting-outputs
 ```
 
 3. **Use generated helpers** in your router:
@@ -170,7 +174,7 @@ static const homeTab = RouteInfo.branch(
   branchIndex: 0,
   branchKey: 'home_branch',
   builder: (context, args) => HomeTab(),
-  isTopLevelOnly: true,
+  policy: RoutePolicy(isTopLevelOnly: true),
 );
 ```
 
@@ -180,28 +184,29 @@ Control route behavior globally, per-route, or per-navigation call using policie
 
 ### 1. Global Defaults
 
-Set default behaviors for your entire app (e.g., in your `main.dart`):
-
-```dart
-RouterBuilderConfig.setDefaults(
-  mustBeAuthorized: true, // Secure by default
-  duplicateBehavior: DuplicateRouteBehavior.duplicate, // Allow stacking by default
-  isPopupRoute: false,
-);
-```
-
-### Global defaults (`@RTConfig`)
-
-Declare one app-wide policy and install it in `main()`:
+Set app-wide defaults once. The declarative way (preferred) is `@RTConfig`:
+declare exactly one `const RoutePolicy` and install it at the start of `main()`:
 
 ```dart
 @RTConfig()
-const appRoutePolicy = RoutePolicy(mustBeAuthorized: false, deepLinkAllowed: true);
+const appRoutePolicy = RoutePolicy(
+  mustBeAuthorized: true, // secure by default
+  duplicateBehavior: DuplicateRouteBehavior.duplicate,
+  isPopupRoute: false,
+);
 
 void main() {
   RoutesHelper.installDefaults(); // applies appRoutePolicy as global defaults
   runApp(const MyApp());
 }
+```
+
+Or set them imperatively with a `RoutePolicy`:
+
+```dart
+RouterBuilderConfig.setDefaults(
+  const RoutePolicy(mustBeAuthorized: true, isPopupRoute: false),
+);
 ```
 
 Per-route and per-call overrides win over these defaults; structural constraints
@@ -229,48 +234,55 @@ Override policies dynamically during navigation:
 
 ```dart
 // Force a new instance even if the route usually refreshes
-RouteArgs(
+final loginArgs = RouteArgs(
   Routes.login,
   policy: const RoutePolicy(
     duplicateBehavior: DuplicateRouteBehavior.duplicate,
   ),
-).go(context);
+);
 
 // Bypass auth check for specific scenarios
-RouteArgs(
+final debugArgs = RouteArgs(
   Routes.debug,
   policy: const RoutePolicy(mustBeAuthorized: false),
-).go(context);
+);
+
+// Hand the args to your navigation layer (e.g. your GoRouter wiring), reading the
+// resolved values - args.effectiveDuplicateBehavior, args.effectiveMustBeAuthorized,
+// args.effectivePushGlobally - to decide how to navigate.
 ```
 
-### Deprecated Root Overrides
+### Reading resolved values
 
-The legacy root override fields remain available for compatibility, but are
-deprecated. Prefer `policy: RoutePolicy(...)` for new code.
+There are no flat behavioral fields any more - everything lives in `RoutePolicy`.
+Read the resolved (always non-null) values back through same-named getters:
 
-Deprecated route-level fields:
-- `RouteInfo.mustBeAuthorized`
-- `RouteInfo.pushGlobally` (resolved; set via `policy: RoutePolicy(pushGlobally: ...)`)
-- `RouteInfo.isPopupRoute`
-- `RouteInfo.duplicateBehavior`
+- `RouteInfo`: `route.mustBeAuthorized`, `route.pushGlobally`, `route.isPopupRoute`,
+  `route.visibleNavBar`, `route.isTopLevelOnly`, `route.shouldReplaceAll`,
+  `route.deepLinkAllowed`, `route.deepLinkPushGlobally`, `route.duplicateBehavior`.
+- `RouteArgs`: the matching `effectiveX` getters (e.g. `args.effectivePushGlobally`),
+  which fold `args.policy` over `route.policy` over the global defaults.
 
-Deprecated call-level fields:
-- `RouteArgs.mustBeAuthorized`
-- `RouteArgs.pushGlobally`
-- `RouteArgs.duplicateBehavior`
+Upgrading from v2's flat params (`isGlobalOnly`, `mustBeAuthorized`, ...)? See
+[`MIGRATION_GUIDE.md`](MIGRATION_GUIDE.md).
 
 ### Policy Precedence
 
-The effective policy is resolved in this order:
-1. **RouteArgs Root Override**: deprecated compatibility fields passed during navigation.
-2. **RouteArgs Policy**: policy object passed during navigation.
-3. **Route Definition Root Override**: deprecated compatibility fields defined in `RouteInfo`.
-4. **Route Definition Policy**: policy object defined in `RouteInfo`.
-5. **Global Defaults**: set via `RouterBuilderConfig`.
+The effective policy is resolved by merging, highest priority first:
+1. **Call policy**: `args.policy` passed during navigation.
+2. **Route policy**: `policy:` defined on the `RouteInfo`.
+3. **Global defaults**: from `@RTConfig` / `RouterBuilderConfig`, falling back to
+   the built-in defaults.
+
+Branch and redirect **structural constraints** are applied last and always win
+(for example, a branch route can never be `pushGlobally`), with a debug assert if
+a policy tries to set a conflicting value.
 
 ## Migration Guide
 
-See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for migrating from separate deep link registries.
+See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for the full v2 -> v3 upgrade
+(automated codemods in `tool/migrate_to_v3.sh` plus the manual steps), the older
+deep-link-registry migration, and a template for future releases.
 
 ## License
 

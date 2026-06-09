@@ -1,7 +1,10 @@
 # CHANGELOG
 ## 3.0.0
 
-Major release. See MIGRATION_GUIDE.md for the full v2 -> v3 guide.
+Major release. See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for the full v2 -> v3
+guide. Run `tool/migrate_to_v3.sh` (dry-run by default; `--write` to apply) to
+make the mechanical edits - removing `isIdSlug`, `MyRoutes` -> `Routes`,
+`RouteInfoHelper` -> `RoutesHelper`, and collapsing deep imports to the barrel.
 
 ### Breaking
 - `RoutePolicy` is now the single home for cascading behavior (9 fields). Flat
@@ -40,13 +43,6 @@ Major release. See MIGRATION_GUIDE.md for the full v2 -> v3 guide.
   now policy-driven.
 - JSON-safe `report()` on `RoutePolicy`/`RouteInfo`/`RouteArgs`.
 - First test suite and a runnable `example/`.
-
-## 2.1.0
-
-- Deprecated root-level policy override fields in favor of `RoutePolicy`.
-- Added route and navigation `localPolicy` helpers to preserve compatibility precedence without relying on deprecated fields internally.
-- Updated generated route metadata extraction to understand inline `RoutePolicy(...)` values for authorization, global push, and popup route categories.
-- Fixed generated helper output so `provider_dependencies` is ignored on a valid file-level ignore line.
 
 ## 2.0.4
 
