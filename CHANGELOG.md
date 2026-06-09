@@ -1,4 +1,46 @@
 # CHANGELOG
+## 3.0.0
+
+Major release. See MIGRATION_GUIDE.md for the full v2 -> v3 guide.
+
+### Breaking
+- `RoutePolicy` is now the single home for cascading behavior (9 fields). Flat
+  behavioral params/getters on `RouteInfo` and `RouteArgs` are removed; set them
+  via `policy:` and read them via the resolved getters.
+- `isGlobalOnly` renamed to `pushGlobally` everywhere.
+- `RouteArgs` has one constructor (the private clone is gone); `isIdSlug` is
+  removed (detect slug-vs-id from the value at the gate).
+- Package layout moved under `lib/src/`; import only
+  `package:router_builder/router_builder.dart`. Deep imports
+  (`package:router_builder/models/...`) and `models/models.dart` are gone.
+- `build.yaml` must import `package:router_builder/builder.dart`.
+- Generated output defaults to `lib/routes.g.dart` with classes `Routes` and
+  `RoutesHelper` (was `lib/route_info_helper.dart`, `MyRoutes`,
+  `RouteInfoHelper`). Override via builder options if you prefer the old names.
+- Deep-link host matching is now exact-or-suffix (was substring); verify your
+  allowed-hosts list.
+- Deep-link key conflicts now fail the build by default (`fail_on_conflict`).
+- Builder typedefs unified to `(BuildContext, RouteArgs?)`.
+- `RouterBuilderConfig.defaults` is read-only; use `setDefaults(RoutePolicy)`.
+
+### Added
+- `RoutePolicy.merge`/`copyWith`/`report` and `global`/`public`/`popup` presets.
+- `RouterBuilderConfig` complete defaults, `reset`, `isConfigured`,
+  `markConfigured`.
+- Same-named resolved getters on `RouteInfo`; `effectiveX` getters on
+  `RouteArgs`; branch/redirect structural constraints (force + debug assert).
+- Runtime-derived generated categories (`normalRoutes`, `globalRoutes`,
+  `popupRoutes`, `topLevelRoutes`, `authorizedRoutes`, `redirectRoutes`) that
+  cannot drift from installed defaults; `allRoutes` now includes redirect-only
+  routes.
+- Configurable generator (`output`, `route_class_name`, `helper_class_name`,
+  `fail_on_conflict`); `@RT` discovery now includes top-level consts/finals.
+- `@RTConfig` annotation + generated `RoutesHelper.installDefaults()`.
+- `deepLinkPushGlobally` policy field (default true); deep-link push-global is
+  now policy-driven.
+- JSON-safe `report()` on `RoutePolicy`/`RouteInfo`/`RouteArgs`.
+- First test suite and a runnable `example/`.
+
 ## 2.1.0
 
 - Deprecated root-level policy override fields in favor of `RoutePolicy`.
