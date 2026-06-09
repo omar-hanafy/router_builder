@@ -1,20 +1,23 @@
 import 'dart:async';
 
+import 'package:dart_helper_utils/dart_helper_utils.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 import 'package:router_builder/src/handlers/deep_link_handler.dart';
 import 'package:router_builder/src/models/duplicate_route_behavior.dart';
 import 'package:router_builder/src/models/route_args.dart';
+import 'package:router_builder/src/models/route_policy.dart';
+import 'package:router_builder/src/router_config.dart';
 
-/// Builder function for creating a localized title for a route.
+/// Builds a localized title for a route.
 typedef ScreenTitleBuilder =
-    String Function(BuildContext context, [RouteArgs? args]);
+    String Function(BuildContext context, RouteArgs? args);
 
-/// Builder function for creating route widgets.
+/// Builds the widget for a route.
 typedef ScreenWidgetBuilder =
     Widget Function(BuildContext context, RouteArgs? args);
 
-/// Builder function for creating custom Page objects with transitions.
+/// Builds a custom [Page] for a route, enabling tailored transitions.
 typedef ScreenPageBuilder =
     Page<dynamic> Function(BuildContext context, RouteArgs? args);
 
@@ -22,13 +25,13 @@ typedef ScreenPageBuilder =
 typedef RouterRedirect =
     FutureOr<String?> Function(BuildContext context, RouteArgs? args);
 
-/// Defines configuration for a navigation route.
+/// Declarative configuration for a navigation route.
 ///
-/// Routes are the building blocks of your navigation system. They define
-/// how screens are built, when redirects occur, and how deep links are handled.
-///
-/// Use the [@RT] annotation on static RouteInfo fields to include them in
-/// code generation.
+/// Behavioral settings live in [policy]; read them back through the same-named
+/// resolved getters (e.g. [pushGlobally], [mustBeAuthorized]), which fold
+/// `route.policy` over [RouterBuilderConfig.defaults] and apply structural
+/// constraints. Annotate static or top-level `RouteInfo` values with `@RT` to
+/// include them in code generation.
 class RouteInfo extends Equatable {
   /// Creates a standard navigation route.
   ///
@@ -39,80 +42,47 @@ class RouteInfo extends Equatable {
     this.builder,
     this.child,
     this.pageBuilder,
-    @Deprecated('Use policy: RoutePolicy(pushGlobally: ...) instead.')
-    bool? isGlobalOnly,
-    this.deepLinkAllowed = true,
-    @Deprecated('Use policy: RoutePolicy(mustBeAuthorized: ...) instead.')
-    bool? mustBeAuthorized,
-    this.visibleNavBar = true,
     this.redirect,
-    @Deprecated('Use policy: RoutePolicy(isPopupRoute: ...) instead.')
-    bool? isPopupRoute,
-    this.shouldReplaceAll = false,
-    this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
-    @Deprecated('Use policy: RoutePolicy(duplicateBehavior: ...) instead.')
-    DuplicateRouteBehavior? duplicateBehavior,
     this.policy,
     String? path,
   }) : _path = path,
-       _isGlobalOnly = isGlobalOnly,
-       _mustBeAuthorized = mustBeAuthorized,
-       _isPopupRoute = isPopupRoute,
-       _duplicateBehavior = duplicateBehavior,
        isBranch = false,
        branchIndex = null,
-       forRedirectionOnly = false,
        branchKey = null,
        branchParentType = null,
+       forRedirectionOnly = false,
        assert(
          (builder != null && child == null && pageBuilder == null) ||
              (builder == null && child != null && pageBuilder == null) ||
              (builder == null && child == null && pageBuilder != null),
-         'builder, child, or pageBuilder must be provided.',
+         'Exactly one of builder, child, or pageBuilder must be provided.',
        );
 
-  /// Creates a route that only performs redirection.
-  ///
-  /// Use this for routes that redirect to other routes based on conditions
-  /// without displaying their own UI.
+  /// Creates a route that only performs redirection (no UI of its own).
   const RouteInfo.redirect(
     this.name, {
     required this.redirect,
     this.title,
-    @Deprecated('Use policy: RoutePolicy(pushGlobally: ...) instead.')
-    bool? isGlobalOnly,
-    this.deepLinkAllowed = true,
-    @Deprecated('Use policy: RoutePolicy(mustBeAuthorized: ...) instead.')
-    bool? mustBeAuthorized,
-    this.visibleNavBar = true,
-    this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
-    @Deprecated('Use policy: RoutePolicy(duplicateBehavior: ...) instead.')
-    DuplicateRouteBehavior? duplicateBehavior,
     this.policy,
     String? path,
   }) : _path = path,
-       _isGlobalOnly = isGlobalOnly,
-       _mustBeAuthorized = mustBeAuthorized,
-       _duplicateBehavior = duplicateBehavior,
-       forRedirectionOnly = true,
-       child = null,
        builder = null,
+       child = null,
        pageBuilder = null,
        isBranch = false,
        branchIndex = null,
        branchKey = null,
        branchParentType = null,
-       _isPopupRoute = null,
-       shouldReplaceAll = false;
+       forRedirectionOnly = true;
 
-  /// Creates a route that belongs to a navigation shell (e.g., tab navigation).
+  /// Creates a route that belongs to a navigation shell (e.g. a tab).
   ///
-  /// Branch routes are grouped by [branchParentType] and ordered by [branchIndex].
-  /// The [branchKey] is used for the branch's Navigator key.
+  /// Branches are grouped by [branchParentType] and ordered by [branchIndex];
+  /// [branchKey] names the branch's navigator key.
   const RouteInfo.branch(
     this.name, {
     required this.branchIndex,
@@ -122,23 +92,11 @@ class RouteInfo extends Equatable {
     this.child,
     this.builder,
     this.pageBuilder,
-    this.deepLinkAllowed = true,
-    @Deprecated('Use policy: RoutePolicy(mustBeAuthorized: ...) instead.')
-    bool? mustBeAuthorized,
-    this.visibleNavBar = true,
-    this.shouldReplaceAll = false,
-    this.isTopLevelOnly = false,
     this.deepLinkNames = const [],
     this.deepLinkHandler,
-    @Deprecated('Use policy: RoutePolicy(duplicateBehavior: ...) instead.')
-    DuplicateRouteBehavior? duplicateBehavior,
     this.policy,
     String? path,
   }) : _path = path,
-       _isGlobalOnly = null,
-       _mustBeAuthorized = mustBeAuthorized,
-       _isPopupRoute = null,
-       _duplicateBehavior = duplicateBehavior,
        isBranch = true,
        redirect = null,
        forRedirectionOnly = false,
@@ -146,170 +104,174 @@ class RouteInfo extends Equatable {
          (builder != null && child == null && pageBuilder == null) ||
              (builder == null && child != null && pageBuilder == null) ||
              (builder == null && child == null && pageBuilder != null),
-         'builder, child, or pageBuilder must be provided.',
+         'Exactly one of builder, child, or pageBuilder must be provided.',
        );
 
   /// Unique identifier for this route.
   final String name;
 
-  final bool? _isGlobalOnly;
-
-  /// Whether this route should only be pushed on the root navigator.
-  @Deprecated('Use policy.pushGlobally instead.')
-  bool? get isGlobalOnly => _legacyIsGlobalOnly;
-
-  /// Whether this route is used solely for redirections.
+  /// Whether this route is used solely for redirection.
   final bool forRedirectionOnly;
-
-  /// Whether this route can be accessed via deep links.
-  final bool deepLinkAllowed;
-
-  final bool? _mustBeAuthorized;
-
-  /// Whether authentication is required to access this route.
-  @Deprecated('Use policy.mustBeAuthorized instead.')
-  bool? get mustBeAuthorized => _mustBeAuthorized;
 
   /// Whether this route belongs to a navigation shell.
   final bool isBranch;
 
-  /// Whether primary navigation UI should remain visible on this route.
-  final bool visibleNavBar;
-
-  /// Position of this branch within its shell, if [isBranch] is true.
+  /// Position of this branch within its shell (branch routes only).
   final int? branchIndex;
 
-  /// Unique navigator key identifier for branch routes.
+  /// Navigator key identifier for branch routes.
   final String? branchKey;
 
   /// Enum discriminator used to group branch routes.
   final Enum? branchParentType;
 
-  final bool? _isPopupRoute;
-
-  /// Whether this route is presented as a popup or dialog.
-  @Deprecated('Use policy.isPopupRoute instead.')
-  bool? get isPopupRoute => _legacyIsPopupRoute;
-
-  /// Whether this route should stay at the top level of its navigator.
-  final bool isTopLevelOnly;
-
   /// Localized title provider for this route.
-  ///
-  /// Provide a callback that returns the title using the current [BuildContext]
-  /// and optional [RouteArgs], e.g. `title: (context, [args]) => context.tr.homeTitle`.
-  ///
-  /// Because this is a function, it is evaluated at call time and picks up
-  /// locale changes during the app session. If omitted, the route has no title.
   final ScreenTitleBuilder? title;
 
   /// Builds the widget for this route when navigation occurs.
   final ScreenWidgetBuilder? builder;
 
-  /// Static widget instance for routes that do not require a builder.
+  /// Static widget instance for routes that do not need a builder.
   final Widget? child;
 
-  /// Builds a custom [Page] for this route, enabling tailored transitions.
+  /// Builds a custom [Page] for this route.
   final ScreenPageBuilder? pageBuilder;
 
-  /// Redirect handler for conditional navigation logic.
+  /// Redirect handler for conditional navigation.
   final RouterRedirect? redirect;
 
-  /// Backing field for [path]; defaults to `/$name` when `null`.
-  final String? _path;
-
-  /// This route will replace all existing routes in the stack when navigated to.
-  final bool shouldReplaceAll;
-
-  /// Alternative names for deep link matching.
+  /// Alternative names for deep-link matching.
   final List<String> deepLinkNames;
 
-  /// Handler for complex deep link logic beyond navigation.
+  /// Handler for complex deep-link logic beyond navigation.
   final DeepLinkHandler<dynamic>? deepLinkHandler;
 
-  final DuplicateRouteBehavior? _duplicateBehavior;
-
-  /// Duplicate behavior override for this route.
-  @Deprecated('Use policy.duplicateBehavior instead.')
-  DuplicateRouteBehavior? get duplicateBehavior => _duplicateBehavior;
-
-  /// Comprehensive policy for this route.
+  /// Comprehensive behavioral policy for this route.
   final RoutePolicy? policy;
 
-  /// Route-level policy with deprecated root overrides applied over [policy].
-  ///
-  /// This does not include navigation-call overrides or global defaults.
-  RoutePolicy get localPolicy => RoutePolicy(
-    mustBeAuthorized: _mustBeAuthorized ?? policy?.mustBeAuthorized,
-    duplicateBehavior: _duplicateBehavior ?? policy?.duplicateBehavior,
-    pushGlobally:
-        _isGlobalOnly ?? policy?.pushGlobally ?? (isBranch ? false : null),
-    isPopupRoute:
-        _isPopupRoute ??
-        policy?.isPopupRoute ??
-        (isBranch || forRedirectionOnly ? false : null),
-  );
+  /// Backing field for [path]; defaults to `/$name` when null.
+  final String? _path;
 
-  bool? get _legacyIsGlobalOnly => _isGlobalOnly ?? (isBranch ? false : null);
-
-  bool? get _legacyIsPopupRoute =>
-      _isPopupRoute ?? (isBranch || forRedirectionOnly ? false : null);
-
-  /// The route's path segment. Defaults to '/$name' if not specified.
+  /// The route's path segment (defaults to `/$name`).
   String get path => _path ?? '/$name';
 
-  /// Builds a hierarchical name optionally scoped under [parentRoute].
-  String generateName({RouteInfo? parentRoute}) {
-    // Use dot notation for hierarchical names
-    return parentRoute != null ? '${parentRoute.name}.$name' : name;
+  /// Applies branch/redirect structural constraints to [policy].
+  ///
+  /// Branches force `pushGlobally`/`isPopupRoute`/`deepLinkPushGlobally` false;
+  /// redirect-only routes force `isPopupRoute`/`visibleNavBar`/`shouldReplaceAll`
+  /// false. In debug builds, an assert fires if [policy] tries to set a forced
+  /// field to a conflicting value.
+  RoutePolicy constrain(RoutePolicy policy) {
+    if (isBranch) {
+      assert(
+        policy.pushGlobally != true &&
+            policy.isPopupRoute != true &&
+            policy.deepLinkPushGlobally != true,
+        'Branch route "$name": pushGlobally/isPopupRoute/deepLinkPushGlobally '
+        'are forced false and cannot be set via policy.',
+      );
+      return policy.copyWith(
+        pushGlobally: false,
+        isPopupRoute: false,
+        deepLinkPushGlobally: false,
+      );
+    }
+    if (forRedirectionOnly) {
+      assert(
+        policy.isPopupRoute != true &&
+            policy.visibleNavBar != true &&
+            policy.shouldReplaceAll != true,
+        'Redirect route "$name": isPopupRoute/visibleNavBar/shouldReplaceAll '
+        'are forced false and cannot be set via policy.',
+      );
+      return policy.copyWith(
+        isPopupRoute: false,
+        visibleNavBar: false,
+        shouldReplaceAll: false,
+      );
+    }
+    return policy;
   }
+
+  /// This route's policy folded over global defaults, then constrained.
+  ///
+  /// All nine fields are non-null. Does not include per-call (`args`) overrides.
+  RoutePolicy get resolvedPolicy => constrain(
+    policy ?? const RoutePolicy(),
+  ).merge(RouterBuilderConfig.defaults);
+
+  /// Whether authentication is required (resolved).
+  bool get mustBeAuthorized => resolvedPolicy.mustBeAuthorized!;
+
+  /// How duplicates are handled (resolved).
+  DuplicateRouteBehavior get duplicateBehavior =>
+      resolvedPolicy.duplicateBehavior!;
+
+  /// Whether this route pushes on the root navigator (resolved).
+  bool get pushGlobally => resolvedPolicy.pushGlobally!;
+
+  /// Whether this route is a popup (resolved).
+  bool get isPopupRoute => resolvedPolicy.isPopupRoute!;
+
+  /// Whether the primary nav UI stays visible (resolved).
+  bool get visibleNavBar => resolvedPolicy.visibleNavBar!;
+
+  /// Whether this route stays top-level in its navigator (resolved).
+  bool get isTopLevelOnly => resolvedPolicy.isTopLevelOnly!;
+
+  /// Whether navigation replaces the whole stack (resolved).
+  bool get shouldReplaceAll => resolvedPolicy.shouldReplaceAll!;
+
+  /// Whether this route is reachable via deep links (resolved).
+  bool get deepLinkAllowed => resolvedPolicy.deepLinkAllowed!;
+
+  /// Whether a deep link to this route pushes globally (resolved).
+  bool get deepLinkPushGlobally => resolvedPolicy.deepLinkPushGlobally!;
+
+  /// Builds a hierarchical name optionally scoped under [parentRoute].
+  String generateName({RouteInfo? parentRoute}) =>
+      parentRoute != null ? '${parentRoute.name}.$name' : name;
 
   /// Builds a hierarchical path optionally scoped under [parentRoute].
   String generatePath({RouteInfo? parentRoute}) =>
       parentRoute != null ? name : path;
 
-  /// Produces an inspection-friendly map describing this route.
-  Map<String, Object?> report() => {
-    '$name RouteInfo': {
-      'name': name,
-      'path': path,
-      'isGlobalOnly': _legacyIsGlobalOnly,
-      'forRedirectionOnly': forRedirectionOnly,
-      'deepLinkAllowed': deepLinkAllowed,
-      'mustBeAuthorized': _mustBeAuthorized,
-      'isBranch': isBranch,
-      'visibleNavBar': visibleNavBar,
-      'branchIndex': branchIndex,
-      'branchKey': branchKey,
-      'isTopLevelOnly': isTopLevelOnly,
-      'isPopupRoute': _legacyIsPopupRoute,
-      'title': title,
-      'builder': builder,
-      'child': child,
-      'pageBuilder': pageBuilder,
-      'redirect': redirect,
-      'deepLinkNames': deepLinkNames,
-      'deepLinkHandler': deepLinkHandler,
-      'duplicateBehavior': _duplicateBehavior,
-      'policy': policy,
-    },
+  /// A rich, JSON-safe diagnostic snapshot (closures become presence flags;
+  /// the resolved policy is included).
+  Map<String, dynamic> report({
+    JsonOptions options = const JsonOptions(),
+    Object? Function(dynamic)? toEncodable,
+  }) => _rawReport().toJsonMap(options: options, toEncodable: toEncodable);
+
+  Map<String, dynamic> _rawReport() => {
+    'name': name,
+    'path': path,
+    'isBranch': isBranch,
+    'forRedirectionOnly': forRedirectionOnly,
+    'branchIndex': branchIndex,
+    'branchKey': branchKey,
+    'branchParentType': branchParentType,
+    'deepLinkNames': deepLinkNames,
+    'hasTitle': title != null,
+    'hasBuilder': builder != null,
+    'hasChild': child != null,
+    'hasPageBuilder': pageBuilder != null,
+    'hasRedirect': redirect != null,
+    'hasDeepLinkHandler': deepLinkHandler != null,
+    'policy': policy?.toMap(),
+    'resolvedPolicy': resolvedPolicy.toMap(),
   };
 
-  /// Fields used by [Equatable] for equality checks.
   @override
   List<Object?> get props => [
     name,
-    _legacyIsGlobalOnly,
-    forRedirectionOnly,
-    deepLinkAllowed,
-    _mustBeAuthorized,
+    path,
     isBranch,
+    forRedirectionOnly,
     branchIndex,
     branchKey,
-    path,
-    _legacyIsPopupRoute,
-    isTopLevelOnly,
-    _duplicateBehavior,
+    branchParentType,
+    deepLinkNames,
     policy,
   ];
 }

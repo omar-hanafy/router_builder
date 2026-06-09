@@ -1,17 +1,20 @@
+import 'package:dart_helper_utils/dart_helper_utils.dart';
 import 'package:equatable/equatable.dart';
 import 'package:router_builder/src/models/duplicate_route_behavior.dart';
 import 'package:router_builder/src/models/route_info.dart';
 import 'package:router_builder/src/models/route_policy.dart';
 import 'package:router_builder/src/router_config.dart';
 
-export 'package:router_builder/src/models/route_policy.dart';
-
-/// Encapsulates arguments for navigation actions.
+/// Per-call navigation arguments for a [RouteInfo].
 ///
-/// RouteArgs combines the target route with navigation parameters
-/// such as IDs, query parameters, and behavioral flags.
+/// Carries the target route plus optional id/params/object and a per-call
+/// [policy] override. Resolution folds `args.policy` over `route.policy` over
+/// [RouterBuilderConfig.defaults], then applies structural constraints; read
+/// the result through the `effectiveX` getters. Subclass via super-parameters
+/// (e.g. dialog/sheet args) - the constructor shape is an extensibility
+/// contract.
 class RouteArgs extends Equatable {
-  /// Creates navigation arguments for the provided [route].
+  /// Creates navigation arguments for [route].
   const RouteArgs(
     this.route, {
     this.id,
@@ -21,42 +24,14 @@ class RouteArgs extends Equatable {
     this.resumeTo,
     this.comingFrom,
     this.isFromDeeplink = false,
-    @Deprecated('Use policy: RoutePolicy(pushGlobally: ...) instead.')
-    bool? pushGlobally,
-    @Deprecated('Use policy: RoutePolicy(duplicateBehavior: ...) instead.')
-    DuplicateRouteBehavior? duplicateBehavior,
-    this.isIdSlug = false,
-    @Deprecated('Use policy: RoutePolicy(mustBeAuthorized: ...) instead.')
-    bool? mustBeAuthorized,
     this.policy,
-  }) : _pushGlobally = pushGlobally,
-       _duplicateBehavior = duplicateBehavior,
-       _mustBeAuthorized = mustBeAuthorized;
+  });
 
-  const RouteArgs._(
-    this.route, {
-    this.id,
-    this.queryParams,
-    this.pathParams,
-    this.object,
-    this.resumeTo,
-    this.comingFrom,
-    this.isFromDeeplink = false,
-    bool? pushGlobally,
-    DuplicateRouteBehavior? duplicateBehavior,
-    this.isIdSlug = false,
-    bool? mustBeAuthorized,
-    this.policy,
-  }) : _pushGlobally = pushGlobally,
-       _duplicateBehavior = duplicateBehavior,
-       _mustBeAuthorized = mustBeAuthorized;
-
-  /// Build RouteArgs from a Uri and a RouteInfo with a path template.
+  /// Builds args from a [uri] using [route]'s path template.
   factory RouteArgs.fromUri(RouteInfo route, Uri uri) {
-    // Derive a template that has no leading '/'
     final template =
         route.path.startsWith('/') ? route.path.substring(1) : route.path;
-    // Inline extraction to avoid cross-layer imports
+
     Map<String, String> extract(String template) {
       final uriSegments = uri.pathSegments;
       final templateSegments = template
@@ -64,10 +39,9 @@ class RouteArgs extends Equatable {
           .where((s) => s.isNotEmpty)
           .toList(growable: false);
       final params = <String, String>{};
-      final len =
-          (uriSegments.length < templateSegments.length)
-              ? uriSegments.length
-              : templateSegments.length;
+      final len = uriSegments.length < templateSegments.length
+          ? uriSegments.length
+          : templateSegments.length;
       for (var i = 0; i < len; i++) {
         final t = templateSegments[i];
         final u = uriSegments[i];
@@ -80,7 +54,7 @@ class RouteArgs extends Equatable {
 
     final pathParams = extract(template);
     final qp = <String, String>{}..addAll(uri.queryParameters);
-    return RouteArgs._(
+    return RouteArgs(
       route,
       id:
           pathParams['id'] ??
@@ -94,105 +68,68 @@ class RouteArgs extends Equatable {
   /// The target route to navigate to.
   final RouteInfo route;
 
-  /// Optional ID parameter (e.g., from path '/users/:id').
+  /// Optional id parameter (e.g. from path `/users/:id`).
   final String? id;
 
   /// Named path parameters extracted from the route's path template.
   final Map<String, String>? pathParams;
 
-  /// Whether this navigation originated from a deep link.
-  final bool isFromDeeplink;
+  /// Query parameters from the URI.
+  final Map<String, String>? queryParams;
 
-  final DuplicateRouteBehavior? _duplicateBehavior;
-
-  /// How to handle navigation when the route already exists in the stack.
-  @Deprecated('Use policy.duplicateBehavior instead.')
-  DuplicateRouteBehavior? get duplicateBehavior => _duplicateBehavior;
-
-  /// Whether the ID is a user-friendly slug vs numeric ID.
-  final bool isIdSlug;
-
-  final bool? _pushGlobally;
-
-  /// Whether to use the root navigator instead of nested navigators.
-  @Deprecated('Use policy.pushGlobally instead.')
-  bool? get pushGlobally => _pushGlobally;
-
-  /// Arbitrary data to pass to the route.
+  /// Arbitrary payload to pass to the route.
   final Object? object;
 
   /// Optional resume intent.
   final RouteArgs? resumeTo;
 
-  /// The originating route for this navigation.
+  /// The originating navigation, if any.
   final RouteArgs? comingFrom;
 
-  /// Query parameters from the URI.
-  final Map<String, String>? queryParams;
+  /// Whether this navigation originated from a deep link.
+  final bool isFromDeeplink;
 
-  final bool? _mustBeAuthorized;
-
-  /// Authorization override for this navigation.
-  @Deprecated('Use policy.mustBeAuthorized instead.')
-  bool? get mustBeAuthorized => _mustBeAuthorized;
-
-  /// Policy override for this navigation.
+  /// Per-call policy override.
   final RoutePolicy? policy;
 
-  /// Navigation-level policy with deprecated root overrides applied over [policy].
+  /// The fully resolved, constrained policy for this navigation call.
   ///
-  /// This does not include route-level policy or global defaults.
-  RoutePolicy get localPolicy => RoutePolicy(
-    mustBeAuthorized: _mustBeAuthorized ?? policy?.mustBeAuthorized,
-    duplicateBehavior: _duplicateBehavior ?? policy?.duplicateBehavior,
-    pushGlobally: _pushGlobally ?? policy?.pushGlobally,
-    isPopupRoute: policy?.isPopupRoute,
-  );
+  /// Precedence: `args.policy` -> `route.policy` -> defaults; structural
+  /// constraints applied last. All nine fields are non-null.
+  RoutePolicy get effectivePolicy => route
+      .constrain((policy ?? const RoutePolicy()).merge(route.policy))
+      .merge(RouterBuilderConfig.defaults);
 
-  // --------------------------------------------------------------------------
-  // EFFECTIVE POLICY RESOLUTION
-  // --------------------------------------------------------------------------
+  /// Resolved authentication requirement.
+  bool get effectiveMustBeAuthorized => effectivePolicy.mustBeAuthorized!;
 
-  /// Resolves the effective authorization requirement.
-  ///
-  /// Precedence:
-  /// 1. Args [mustBeAuthorized]
-  /// 2. Args [policy]
-  /// 3. Route [mustBeAuthorized]
-  /// 4. Route [policy]
-  /// 5. Global defaults
-  bool get effectiveMustBeAuthorized {
-    return localPolicy.mustBeAuthorized ??
-        route.localPolicy.mustBeAuthorized ??
-        RouterBuilderConfig.defaults.mustBeAuthorized ??
-        true;
-  }
+  /// Resolved duplicate behavior.
+  DuplicateRouteBehavior get effectiveDuplicateBehavior =>
+      effectivePolicy.duplicateBehavior!;
 
-  /// Resolves the effective duplicate behavior.
-  DuplicateRouteBehavior get effectiveDuplicateBehavior {
-    return localPolicy.duplicateBehavior ??
-        route.localPolicy.duplicateBehavior ??
-        RouterBuilderConfig.defaults.duplicateBehavior ??
-        DuplicateRouteBehavior.duplicate;
-  }
+  /// Resolved root-navigator push setting.
+  bool get effectivePushGlobally => effectivePolicy.pushGlobally!;
 
-  /// Resolves the effective global push setting.
-  bool get effectivePushGlobally {
-    return localPolicy.pushGlobally ??
-        route.localPolicy.pushGlobally ??
-        RouterBuilderConfig.defaults.pushGlobally ??
-        false;
-  }
+  /// Resolved popup setting.
+  bool get effectiveIsPopupRoute => effectivePolicy.isPopupRoute!;
 
-  /// Resolves the effective popup route setting.
-  bool get effectiveIsPopupRoute {
-    return localPolicy.isPopupRoute ??
-        route.localPolicy.isPopupRoute ??
-        RouterBuilderConfig.defaults.isPopupRoute ??
-        false;
-  }
+  /// Resolved nav-bar visibility.
+  bool get effectiveVisibleNavBar => effectivePolicy.visibleNavBar!;
 
-  /// Create a copy with overridden fields.
+  /// Resolved top-level-only setting.
+  bool get effectiveIsTopLevelOnly => effectivePolicy.isTopLevelOnly!;
+
+  /// Resolved replace-all setting.
+  bool get effectiveShouldReplaceAll => effectivePolicy.shouldReplaceAll!;
+
+  /// Resolved deep-link allowance.
+  bool get effectiveDeepLinkAllowed => effectivePolicy.deepLinkAllowed!;
+
+  /// Resolved deep-link push-global setting.
+  bool get effectiveDeepLinkPushGlobally =>
+      effectivePolicy.deepLinkPushGlobally!;
+
+  /// Returns a copy with the provided fields overridden.
   RouteArgs copyWith({
     RouteInfo? route,
     String? id,
@@ -202,15 +139,8 @@ class RouteArgs extends Equatable {
     RouteArgs? resumeTo,
     RouteArgs? comingFrom,
     bool? isFromDeeplink,
-    @Deprecated('Use policy: RoutePolicy(pushGlobally: ...) instead.')
-    bool? pushGlobally,
-    @Deprecated('Use policy: RoutePolicy(duplicateBehavior: ...) instead.')
-    DuplicateRouteBehavior? duplicateBehavior,
-    bool? isIdSlug,
-    @Deprecated('Use policy: RoutePolicy(mustBeAuthorized: ...) instead.')
-    bool? mustBeAuthorized,
     RoutePolicy? policy,
-  }) => RouteArgs._(
+  }) => RouteArgs(
     route ?? this.route,
     id: id ?? this.id,
     pathParams: pathParams ?? this.pathParams,
@@ -219,27 +149,42 @@ class RouteArgs extends Equatable {
     resumeTo: resumeTo ?? this.resumeTo,
     comingFrom: comingFrom ?? this.comingFrom,
     isFromDeeplink: isFromDeeplink ?? this.isFromDeeplink,
-    pushGlobally: pushGlobally ?? _pushGlobally,
-    duplicateBehavior: duplicateBehavior ?? _duplicateBehavior,
-    isIdSlug: isIdSlug ?? this.isIdSlug,
-    mustBeAuthorized: mustBeAuthorized ?? _mustBeAuthorized,
     policy: policy ?? this.policy,
   );
 
   /// Returns a copy with navigation context preserved but flow metadata cleared.
-  RouteArgs cleared() => RouteArgs._(
+  RouteArgs cleared() => RouteArgs(
     route,
     id: id,
     pathParams: pathParams,
     queryParams: queryParams,
     object: object,
     isFromDeeplink: isFromDeeplink,
-    pushGlobally: _pushGlobally,
-    duplicateBehavior: _duplicateBehavior,
-    isIdSlug: isIdSlug,
-    mustBeAuthorized: _mustBeAuthorized,
     policy: policy,
   );
+
+  /// A rich, JSON-safe diagnostic snapshot (effective policy + shallow route /
+  /// resumeTo / comingFrom summaries to avoid cycles).
+  Map<String, dynamic> report({
+    JsonOptions options = const JsonOptions(),
+    Object? Function(dynamic)? toEncodable,
+  }) => _rawReport().toJsonMap(options: options, toEncodable: toEncodable);
+
+  Map<String, dynamic> _rawReport() => {
+    'route': {'name': route.name, 'path': route.path},
+    'id': id,
+    'pathParams': pathParams,
+    'queryParams': queryParams,
+    'object': object,
+    'isFromDeeplink': isFromDeeplink,
+    'resumeTo': resumeTo == null
+        ? null
+        : {'name': resumeTo!.route.name, 'id': resumeTo!.id},
+    'comingFrom': comingFrom == null
+        ? null
+        : {'name': comingFrom!.route.name, 'id': comingFrom!.id},
+    'effectivePolicy': effectivePolicy.toMap(),
+  };
 
   @override
   List<Object?> get props => [
@@ -251,16 +196,12 @@ class RouteArgs extends Equatable {
     resumeTo,
     comingFrom,
     isFromDeeplink,
-    _pushGlobally,
-    _duplicateBehavior,
-    isIdSlug,
-    _mustBeAuthorized,
     policy,
   ];
 }
 
 /// Convenience helpers for nullable [RouteArgs].
 extension RouteArgsX on RouteArgs? {
-  /// Returns `true` when the underlying route requires authorization.
+  /// Whether the underlying route requires authorization.
   bool get requiresAuth => this?.effectiveMustBeAuthorized ?? false;
 }

@@ -103,9 +103,9 @@ class DeepLinkMatcher {
   }
 
   RouteArgs _buildArgs(RouteInfo route, Uri uri, Uri? original) {
+    final pushGlobally = route.resolvedPolicy.deepLinkPushGlobally!;
     return RouteArgs.fromUri(route, uri).copyWith(
-      pushGlobally: true,
-      isFromDeeplink: true,
+      policy: RoutePolicy(pushGlobally: pushGlobally),
       object: original ?? uri,
     );
   }
