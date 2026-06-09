@@ -71,7 +71,9 @@ void main() {
             matches(RegExp(r'RouteInfo settings = _i\d+\.settings')),
             matches(RegExp(r'RouteInfo splash = _i\d+\.AppRoutes\.splashGate')),
             // branch map + per-enum lists keyed by the shell enum
-            matches(RegExp(r'Map<_i\d+\.AppShell, Map<int\?, RouteInfo>> branches')),
+            matches(
+              RegExp(r'Map<_i\d+\.AppShell, Map<int\?, RouteInfo>> branches'),
+            ),
             contains('homeBranches'),
             contains('searchBranches'),
             contains('profileBranches'),
@@ -90,7 +92,11 @@ void main() {
             contains("'product':"),
             contains("'items':"),
             // @RTConfig wiring
-            matches(RegExp(r'RouterBuilderConfig\.setDefaults\(_i\d+\.appRoutePolicy\)')),
+            matches(
+              RegExp(
+                r'RouterBuilderConfig\.setDefaults\(_i\d+\.appRoutePolicy\)',
+              ),
+            ),
           ]),
         ),
       },

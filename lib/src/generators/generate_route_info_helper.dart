@@ -373,8 +373,8 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     buffer
       ..writeln("import 'package:dart_helper_utils/dart_helper_utils.dart';")
       ..writeln("import 'package:router_builder/router_builder.dart';");
-    final entries = prefixes.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    final entries =
+        prefixes.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
     for (final e in entries) {
       buffer.writeln("import '${e.key}' as ${e.value};");
     }

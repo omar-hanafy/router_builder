@@ -61,14 +61,16 @@ abstract class RoutesHelper {
   ];
 
   /// Standard routes (non-branch, non-global, non-redirect).
-  static List<RouteInfo> get normalRoutes => allRoutes
-      .where((r) => !r.isBranch && !r.forRedirectionOnly && !r.pushGlobally)
-      .toList();
+  static List<RouteInfo> get normalRoutes =>
+      allRoutes
+          .where((r) => !r.isBranch && !r.forRedirectionOnly && !r.pushGlobally)
+          .toList();
 
   /// Routes pushed on the root navigator.
-  static List<RouteInfo> get globalRoutes => allRoutes
-      .where((r) => r.pushGlobally && !r.isBranch && !r.forRedirectionOnly)
-      .toList();
+  static List<RouteInfo> get globalRoutes =>
+      allRoutes
+          .where((r) => r.pushGlobally && !r.isBranch && !r.forRedirectionOnly)
+          .toList();
 
   /// Popup routes.
   static List<RouteInfo> get popupRoutes =>
