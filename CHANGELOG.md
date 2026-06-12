@@ -1,4 +1,8 @@
 # CHANGELOG
+## 3.0.1
+
+- Relaxed the `analyzer` constraint to allow compatible 12.x releases.
+
 ## 3.0.0
 
 Major release. See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for the full v2 -> v3
