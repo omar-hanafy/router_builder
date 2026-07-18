@@ -9,3 +9,12 @@ pubspec.lock
 
 # Internal planning and design docs (not useful to package consumers).
 docs/
+
+# AI coding-assistant plugin: distributed from the git repository, never via
+# the pub.dev archive (pub.dev drops the hidden .claude-plugin/.codex-plugin
+# manifests, which would leave a broken partial plugin). Repo-only maintainer
+# instructions travel with it.
+plugins/
+AGENTS.md
+CLAUDE.md
+tool/validate_plugin.dart

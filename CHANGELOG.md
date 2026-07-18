@@ -1,4 +1,18 @@
 # CHANGELOG
+## 3.0.2
+
+- Added installable AI coding-assistant support for Claude Code and OpenAI
+  Codex, distributed from the GitHub repository (marketplace
+  `router-builder-plugins`, plugin `router-builder`): eight package-specific
+  skills (setup, add-route, route-policy / deep-link / generation debugging,
+  route audits, the v2 -> v3 migration with the bundled codemod, and a version
+  upgrade orchestrator) plus a read-only `route-auditor` subagent for Claude
+  Code. See "AI coding-assistant support" in the README. No runtime API or
+  dependency changes; the plugin tree is excluded from the pub.dev archive.
+- Docs: generator commands updated for current build_runner, which removed
+  the `--delete-conflicting-outputs` flag (older build_runner versions still
+  accept it).
+
 ## 3.0.1
 
 - Relaxed the `analyzer` constraint to allow compatible 12.x releases.

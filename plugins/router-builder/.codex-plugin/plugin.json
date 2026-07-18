@@ -1,0 +1,25 @@
+{
+  "name": "router-builder",
+  "version": "3.0.2",
+  "description": "Package-specific assistant for the router_builder Flutter package: project setup, adding routes, policy and deep-link debugging, build_runner troubleshooting, route audits, and versioned migrations (v2 to v3).",
+  "author": {
+    "name": "Omar Hanafy"
+  },
+  "homepage": "https://github.com/omar-hanafy/router_builder",
+  "repository": "https://github.com/omar-hanafy/router_builder",
+  "license": "MIT",
+  "keywords": [
+    "flutter",
+    "dart",
+    "navigation",
+    "routing",
+    "deep-linking",
+    "code-generation",
+    "router_builder"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Router Builder",
+    "shortDescription": "Skills for the router_builder Flutter navigation and deep-link package."
+  }
+}

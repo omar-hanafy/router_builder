@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: dart analyze
+      - run: flutter test
+      - run: dart test --run-skipped test/generator/
+      - name: Validate AI plugin tree
+        run: dart tool/validate_plugin.dart
+      - name: Publish dry run
+        run: dart pub publish --dry-run
+      - name: Analyze example
+        run: |
+          cd example
+          flutter pub get
+          dart run build_runner build
+          # Normalize with the SDK formatter before diffing: the generator
+          # formats with the resolved dart_style library, which can lag the
+          # SDK CLI formatter.
+          dart format lib/routes.g.dart
+          git diff --exit-code lib/routes.g.dart
+          flutter analyze

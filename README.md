@@ -2,6 +2,45 @@
 
 Router Builder simplifies Flutter route management and deep linking through code generation. Define your routes once, and let the generator handle the boilerplate.
 
+## AI coding-assistant support (agent plugin)
+
+This repository ships an installable **agent plugin** for **Claude Code** and
+**OpenAI Codex** with package-specific skills: project setup, adding routes,
+policy and deep-link debugging, generation troubleshooting, route audits, and
+the automated **v2 -> v3 migration**. It extends your coding agent only - it
+adds no code, dependency, or telemetry to your Flutter app, and it is
+distributed from this repository (not inside the pub.dev package archive).
+
+Install in **Claude Code** (CLI/desktop v2.x):
+
+```
+/plugin marketplace add omar-hanafy/router_builder
+/plugin install router-builder@router-builder-plugins
+```
+
+Install in **Codex** (CLI 0.144+; plugins also work in ChatGPT desktop/web
+Work mode, not the IDE extension):
+
+```
+codex plugin marketplace add omar-hanafy/router_builder
+codex plugin add router-builder@router-builder-plugins
+```
+
+Start a **new session** after installing. Then just ask normally - "add an
+orders screen at /orders/:orderId, deep-linkable, auth required", "why does
+myapp://profile/9 open nothing?", "upgrade us from router_builder 2 to 3" - or
+invoke a skill explicitly: `/router-builder:add-route` (Claude Code) /
+`$router-builder:add-route` (Codex). Claude Code additionally gets a read-only
+`route-auditor` subagent for full route audits.
+
+Trust notes: the plugin is instructions + reference docs; its one executable
+is the dry-run-by-default v2->v3 codemod script (a byte-identical copy of
+[`tool/migrate_to_v3.sh`](tool/migrate_to_v3.sh)). No hooks, no MCP servers,
+no network access. Skill content targets router_builder 3.x and recognizes
+2.x code. Update via your client's marketplace update/upgrade command; remove
+with its uninstall/remove command. Full details, the skill catalog, and
+maintainer docs: [`plugins/router-builder/README.md`](plugins/router-builder/README.md).
+
 ## Features
 
 - 🚀 **Code Generation**: Automatically generates route helpers from annotations
@@ -66,8 +105,11 @@ class AppRoutes {
 2. **Run the generator**:
 
 ```bash
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 ```
+
+(Current build_runner deletes conflicting outputs automatically; on older
+build_runner versions add `--delete-conflicting-outputs`.)
 
 3. **Use generated helpers** in your router:
 

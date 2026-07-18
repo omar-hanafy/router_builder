@@ -1,0 +1,15 @@
+{
+  "name": "router-builder-plugins",
+  "interface": {
+    "displayName": "Router Builder Plugins"
+  },
+  "plugins": [
+    {
+      "name": "router-builder",
+      "source": {
+        "source": "local",
+        "path": "./plugins/router-builder"
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "router-builder-plugins",
+  "owner": {
+    "name": "Omar Hanafy"
+  },
+  "description": "AI coding-assistant plugins for the router_builder Flutter navigation and deep-link package.",
+  "plugins": [
+    {
+      "name": "router-builder",
+      "source": "./plugins/router-builder",
+      "description": "Package-specific assistant for the router_builder Flutter package: project setup, adding routes, policy and deep-link debugging, build_runner troubleshooting, route audits, and versioned migrations (v2 to v3).",
+      "version": "3.0.2",
+      "author": {
+        "name": "Omar Hanafy"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/omar-hanafy/router_builder",
+      "tags": [
+        "flutter",
+        "dart",
+        "routing",
+        "deep-linking",
+        "code-generation"
+      ]
+    }
+  ]
+}

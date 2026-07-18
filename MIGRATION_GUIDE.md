@@ -251,8 +251,11 @@ change `build_extensions` to the same path.
 ### Step 3: regenerate
 
 ```bash
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 ```
+
+(Current build_runner deletes conflicting outputs automatically; on older
+build_runner versions add `--delete-conflicting-outputs`.)
 
 ### Step 4: verify
 
@@ -359,7 +362,7 @@ The changes that need judgement, with before/after for each. Be explicit that
 the script does not touch these and the code will not compile until they are done.
 
 ### Step 3: regenerate
-`dart run build_runner build --delete-conflicting-outputs` (if codegen changed).
+`dart run build_runner build` (if codegen changed).
 
 ### Step 4: verify
 `dart analyze` / `flutter analyze`, and run the tests.
