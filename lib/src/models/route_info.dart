@@ -233,8 +233,107 @@ class RouteInfo extends Equatable {
       parentRoute != null ? '${parentRoute.name}.$name' : name;
 
   /// Builds a hierarchical path optionally scoped under [parentRoute].
+  ///
+  /// Top level: the declared [path] (e.g. `/account-settings`).
+  /// Nested under [parentRoute]: the route [name] (e.g. `app_settings`).
+  ///
+  /// A nested segment is relative and identifies the route *inside the tree*,
+  /// so it deliberately tracks [name] rather than [path]: the public URL in
+  /// [path] can change without moving the route within its shell branch.
+  ///
+  /// Do not re-derive this rule at call sites - use [location] instead, which
+  /// is built on top of this method so navigation and registration cannot
+  /// disagree.
   String generatePath({RouteInfo? parentRoute}) =>
       parentRoute != null ? name : path;
+
+  /// The location string to hand to the router when navigating to this route.
+  ///
+  /// This is the only supported way to build a location. It reuses
+  /// [generatePath] - the same method the router tree is registered with - so a
+  /// location produced here always resolves against the registered tree.
+  ///
+  /// Pass [parentRoute] when pushing inside a shell branch (the branch's root
+  /// route); leave it null for a root-navigator/global push, which uses the
+  /// route's own top-level [path].
+  ///
+  /// Path parameters are filled from [pathParams], falling back to [id] for
+  /// `:id`. In debug builds a missing parameter trips an assert; in release the
+  /// template is returned unfilled so the router surfaces its error page
+  /// instead of the caller throwing inside a tap handler.
+  String location({
+    RouteInfo? parentRoute,
+    String? id,
+    Map<String, String>? pathParams,
+    Map<String, String>? queryParams,
+  }) {
+    final segment = _hydratePath(
+      generatePath(parentRoute: parentRoute),
+      id: id,
+      pathParams: pathParams,
+    );
+    final fullPath =
+        parentRoute == null
+            ? segment
+            : _joinPaths(parentRoute.generatePath(), segment);
+    return Uri(
+      path: fullPath,
+      queryParameters:
+          (queryParams == null || queryParams.isEmpty) ? null : queryParams,
+    ).toString();
+  }
+
+  /// [location] driven by an existing [RouteArgs].
+  ///
+  /// Prefer this at navigation call sites: it threads `id`, `pathParams` and
+  /// `queryParams` through in one step, so a caller cannot forget one.
+  String locationForArgs(RouteArgs args, {RouteInfo? parentRoute}) => location(
+    parentRoute: parentRoute,
+    id: args.id,
+    pathParams: args.pathParams,
+    queryParams: args.queryParams,
+  );
+
+  static final RegExp _pathParamPattern = RegExp(r':(\w+)');
+
+  String _hydratePath(
+    String template, {
+    required String? id,
+    required Map<String, String>? pathParams,
+  }) {
+    if (!template.contains(':')) return template;
+
+    final params = <String, String>{...?pathParams};
+    if (id != null && id.isNotEmpty) params.putIfAbsent('id', () => id);
+
+    final missing = <String>[];
+    final hydrated = template.replaceAllMapped(_pathParamPattern, (match) {
+      final key = match.group(1)!;
+      final value = params[key];
+      if (value == null || value.isEmpty) {
+        missing.add(key);
+        return match.group(0)!;
+      }
+      return Uri.encodeComponent(value);
+    });
+
+    assert(
+      missing.isEmpty,
+      'Route "$name": missing path parameter(s) ${missing.join(', ')} for '
+      '"$template". Pass them via pathParams (or id for ":id").',
+    );
+    return hydrated;
+  }
+
+  /// Joins a parent and child path the same way go_router's `concatenatePaths`
+  /// does, so a built location matches the registered full path exactly.
+  static String _joinPaths(String parentPath, String childPath) {
+    final segments = <String>[
+      ...parentPath.split('/'),
+      ...childPath.split('/'),
+    ].where((segment) => segment.isNotEmpty);
+    return '/${segments.join('/')}';
+  }
 
   /// A rich, JSON-safe diagnostic snapshot (closures become presence flags;
   /// the resolved policy is included).
