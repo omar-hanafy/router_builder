@@ -1,4 +1,34 @@
 # CHANGELOG
+## 3.1.0
+
+- Added `RouteInfo.location()` and `RouteInfo.locationForArgs()`: the supported
+  way to build a location string to hand to the router. Both are derived from
+  the same `generatePath()` the route tree is registered with, so a location can
+  no longer point at a path the tree does not register.
+
+  Apps that built locations by hand (for example
+  `'/$branchName/${route.name}'`) should call `location(parentRoute: branch)`
+  instead. Hand-rolled string concatenation is the failure this release closes:
+  registration and navigation were two independent implementations of one rule,
+  and editing either one silently desynced navigation from the tree.
+
+  `location()` also fixes two defects such call sites commonly had: the parent
+  segment is taken from the parent's `generatePath()` rather than its `name`, so
+  a branch with a custom `path` nests correctly; and path parameters are
+  hydrated from `pathParams`/`id` and percent-encoded.
+
+- Clarified in the `generatePath()` docs that a nested route is registered under
+  its `name`, not its `path`. The nested segment identifies the route inside the
+  tree, so it stays stable when the public URL in `path` changes; the two are
+  allowed to differ, and `deepLinkNames` carries the public-URL job.
+
+- A missing path parameter now trips an assert in debug and returns the unfilled
+  template in release, so the router surfaces its error page instead of the
+  caller throwing inside a tap handler.
+
+- No breaking changes: `generatePath()`, `generateName()` and the registered
+  tree are unchanged.
+
 ## 3.0.2
 
 - Added installable AI coding-assistant support for Claude Code and OpenAI
