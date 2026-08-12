@@ -1,6 +1,6 @@
 ---
 name: upgrade-router-builder
-description: Use when a project wants to update the router_builder package to a newer version and the migration path is unclear - "upgrade router_builder", "move to the latest router_builder", dependency bumps from 1.x or 2.x, or deciding whether an upgrade is breaking before touching code.
+description: Use when a project wants to update the router_builder package to a newer version and the migration path is unclear - "upgrade router_builder", "move to the latest router_builder", dependency bumps from 1.x, 2.x or 3.x, or deciding whether an upgrade is breaking before touching code. Also use when router_builder is capping an app's analyzer/build_runner/dart_style upgrade.
 ---
 
 # Upgrade router_builder (version orchestrator)
@@ -12,21 +12,39 @@ to its dedicated skill. Never guess the version from imports alone.
 
 - Installed: `grep -A2 "router_builder" pubspec.lock` (the lockfile is truth;
   pubspec constraints can be stale).
-- Target: latest 3.x unless the user pinned one (`dart pub outdated` shows it).
-- Confirm with API tells when the lockfile is missing:
-  `Routes`/`RoutesHelper`/`routes.g.dart` and `policy: RoutePolicy(...)` mean
-  3.x; `MyRoutes`/`RouteInfoHelper`/`route_info_helper.dart` or flat params
+- Target: latest 4.x unless the user pinned one (`dart pub outdated` shows it).
+- Confirm with API tells when the lockfile is missing: a
+  `router_builder_generator` dev dependency means 4.x;
+  `Routes`/`RoutesHelper`/`routes.g.dart` and `policy: RoutePolicy(...)` with
+  the generator still inside `router_builder` mean 3.x;
+  `MyRoutes`/`RouteInfoHelper`/`route_info_helper.dart` or flat params
   (`isGlobalOnly:`, `isIdSlug:`) mean 1.x/2.x.
+- **Check `flutter --version` before targeting 4.x.** v4's generator needs
+  `analyzer >=13.0.0`, which needs `meta ^1.18.0`, which means Flutter 3.44 or
+  newer. On an older SDK, 4.x cannot be resolved at all - target latest 3.x
+  instead and say why.
 
 ## Step 2: Route by path
 
 | From -> To | Path |
 |---|---|
+| 4.x -> newer 4.x | Bump constraint (both packages, they release in lockstep), `flutter pub get`, `dart run build_runner build`, `dart analyze`, run tests. |
+| 3.x -> 4.x | BREAKING, but pubspec-only. Use the `migrate-v3-to-v4` skill (codemod + regenerate). No Dart source changes. |
 | 3.x -> newer 3.x | Bump constraint, `flutter pub get`, `dart run build_runner build`, `dart analyze`, run tests. 3.0.1 only relaxed the analyzer constraint; no code changes. |
+| 2.x -> 4.x | Two hops: `migrate-v2-to-v3`, then `migrate-v3-to-v4`. |
 | 2.x -> 3.x | BREAKING. Use the `migrate-v2-to-v3` skill (codemod + manual policy folds + regenerate + host audit). |
 | 1.x -> 3.x | Two hops: first 1.x -> 2.0.4 (below), then `migrate-v2-to-v3`. |
 | 1.x -> 2.x only | Deps-only hop (below). |
 | 0.x | Never published to pub.dev; a 0.x source tree predates the unified deep-link system. Treat as legacy: consult the package MIGRATION_GUIDE.md appendix (v0 -> v1 deep-link registry migration), then continue up the chain. |
+
+## "router_builder is blocking my dependency upgrade"
+
+If a solve conflict names `analyzer`, `build`, `build_runner`, or `dart_style`
+and `router_builder` appears in the explanation, the project is on 3.x or
+earlier, where those were regular `dependencies` of the runtime package and
+capped the app's whole build chain. The fix is the 3.x -> 4.x hop, not a
+constraint edit or an override: v4 moves the generator into a
+`dev_dependency`, which is not transitive. See `migrate-v3-to-v4`.
 
 ## The 1.x -> 2.0.4 hop (deps-only, no dedicated skill needed)
 

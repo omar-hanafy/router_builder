@@ -1,4 +1,60 @@
 # CHANGELOG
+## 4.0.0
+
+**Breaking: the code generator moved to a new package,
+`router_builder_generator`.** No runtime API changed - `RouteInfo`,
+`RoutePolicy`, `RouteArgs`, `@RT`, `@RTConfig`, the deep-link layer, and the
+generated output are all identical, and the import stays
+`package:router_builder/router_builder.dart`. See
+[MIGRATION_GUIDE.md](MIGRATION_GUIDE.md#v3---v4); `tool/migrate_to_v4.sh`
+automates the pubspec edits.
+
+```yaml
+dependencies:
+  router_builder: ^4.0.0
+dev_dependencies:
+  router_builder_generator: ^4.0.0
+```
+
+- `router_builder` no longer depends on `analyzer`, `build`, `dart_style`,
+  `glob`, or `source_gen`. It now depends only on `flutter`,
+  `dart_helper_utils`, and `equatable`; a resolved app graph drops from about
+  90 packages to 32.
+
+  This is the release's whole point. Those packages were declared as regular
+  `dependencies`, so although the generator's code never reached an app's
+  imports, pub still had to *resolve* them for every consumer - and
+  `router_builder`'s `analyzer` upper bound capped what that consumer could
+  upgrade `build_runner`, `build`, and `dart_style` to. Because regular
+  dependencies are transitive, any package depending on `router_builder`
+  passed the same cap to its own consumers. Moving the generator behind a
+  `dev_dependency` removes the cap structurally rather than by widening a
+  bound each time the ecosystem moves.
+
+- `analyzer` support is now `>=13.0.0 <15.0.0` (was `>=9.0.0 <13.0.0`). The
+  generator was migrated to the analyzer 13 AST: `NamedExpression` became
+  `NamedArgument`, `Label.label` became a `Token` on `Label.name`, and
+  `ArgumentList.arguments` now yields `Argument` rather than `Expression`.
+
+- `source_gen` was dropped. It was declared but never imported.
+
+- The builder entrypoint moved from `package:router_builder/builder.dart` to
+  `package:router_builder_generator/builder.dart`, and its `build.yaml` key
+  from `router_builder:generate_route_info_helper` to
+  `router_builder_generator:generate_route_info_helper`. This only affects
+  apps with a custom `build.yaml`.
+
+- Generator tests now run against a stubbed package graph instead of loading
+  real Flutter sources, which keeps `router_builder_generator` pure Dart. That
+  is what lets CI verify the analyzer range at both ends
+  (`tool/test_analyzer_matrix.sh`): a Flutter dependency would pin `meta`
+  exactly and cap `analyzer` below 13.1.0, making a `<15.0.0` claim
+  untestable. The suite also went from ~35s to under 1s.
+
+- **Minimum Flutter for regeneration: 3.44.** `analyzer >=13.0.0` requires
+  `meta ^1.18.0`. Older SDKs cannot resolve it; stay on 3.x until you upgrade.
+  The runtime package alone carries no such floor.
+
 ## 3.1.0
 
 - Added `RouteInfo.location()` and `RouteInfo.locationForArgs()`: the supported

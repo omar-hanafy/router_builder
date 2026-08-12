@@ -68,11 +68,22 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  router_builder: ^3.0.0
+  router_builder: ^4.0.0
 
 dev_dependencies:
   build_runner: ^2.15.0
+  router_builder_generator: ^4.0.0
 ```
+
+`router_builder` is the runtime (annotations, `RouteInfo`, policies, deep
+links). `router_builder_generator` is the build-time generator and belongs in
+`dev_dependencies` — that is what keeps `analyzer`, `build`, and `dart_style`
+out of your app's production dependency graph, where they would otherwise cap
+which versions you are allowed to upgrade to.
+
+> Upgrading from 3.x? It is a pubspec-only change — no Dart code moves. See the
+> [migration guide](MIGRATION_GUIDE.md#v3---v4); `tool/migrate_to_v4.sh`
+> automates it. Regenerating with v4 needs Flutter 3.44 or newer.
 
 ### Basic Usage
 

@@ -18,3 +18,16 @@ plugins/
 AGENTS.md
 CLAUDE.md
 tool/validate_plugin.dart
+
+# example/ ships inside this archive, so it depends on router_builder_generator
+# by hosted version; the local path override is dev-only and must not ship.
+example/pubspec_overrides.yaml
+
+# DO NOT add `generator/` here. pub applies the repository-root .pubignore to
+# every package in the repo, including nested ones, and gitignore semantics do
+# not allow a child .pubignore to re-include an excluded directory. Adding it
+# would hide router_builder_generator's own pubspec from its own publish
+# ("The pubspec is hidden, probably by .gitignore or pubignore") and make that
+# package unpublishable. The generator's sources therefore ride along in this
+# archive; they are inert (~18 KB) and cost far less than an out-of-tree
+# publish ritual.

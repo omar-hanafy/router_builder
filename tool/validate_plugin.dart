@@ -30,11 +30,13 @@ Map<String, dynamic>? readJson(String path) {
   }
 }
 
-String? pubspecVersion() {
+String? pubspecVersion([String path = 'pubspec.yaml']) {
+  final file = File(path);
+  if (!file.existsSync()) return null;
   final match = RegExp(
     r'^version:\s*(\S+)\s*$',
     multiLine: true,
-  ).firstMatch(File('pubspec.yaml').readAsStringSync());
+  ).firstMatch(file.readAsStringSync());
   return match?.group(1);
 }
 
@@ -103,6 +105,20 @@ void main() {
   final codexMarket = readJson('.agents/plugins/marketplace.json');
   final version = pubspecVersion();
   if (version == null) fail('could not read version from pubspec.yaml');
+
+  // --- runtime/generator lockstep ----------------------------------------
+  // router_builder and router_builder_generator ship as a pair; a consumer
+  // reading "^4.0.0" in the migration guide must get a matching generator.
+  const generatorPubspec = 'generator/pubspec.yaml';
+  final generatorVersion = pubspecVersion(generatorPubspec);
+  if (generatorVersion == null) {
+    fail('could not read version from $generatorPubspec');
+  } else if (version != null && generatorVersion != version) {
+    fail(
+      '$generatorPubspec version is "$generatorVersion" but pubspec.yaml '
+      'version is "$version" (the two packages release in lockstep)',
+    );
+  }
 
   // --- version and identity sync ---------------------------------------
   final claudeEntry = (claudeMarket?['plugins'] as List?)
@@ -217,13 +233,25 @@ void main() {
   }
 
   // --- bundled codemod parity + permissions ------------------------------
-  const canonical = 'tool/migrate_to_v3.sh';
-  const bundled = '$pluginDir/skills/migrate-v2-to-v3/scripts/migrate_to_v3.sh';
-  final canonicalFile = File(canonical);
-  final bundledFile = File(bundled);
-  if (!canonicalFile.existsSync() || !bundledFile.existsSync()) {
-    fail('codemod script missing ($canonical or $bundled)');
-  } else {
+  // Every migration skill bundles a copy of its codemod so the plugin works
+  // standalone; each copy must stay byte-identical to the canonical tool/ one.
+  const codemods = <(String, String)>[
+    (
+      'tool/migrate_to_v3.sh',
+      '$pluginDir/skills/migrate-v2-to-v3/scripts/migrate_to_v3.sh',
+    ),
+    (
+      'tool/migrate_to_v4.sh',
+      '$pluginDir/skills/migrate-v3-to-v4/scripts/migrate_to_v4.sh',
+    ),
+  ];
+  for (final (canonical, bundled) in codemods) {
+    final canonicalFile = File(canonical);
+    final bundledFile = File(bundled);
+    if (!canonicalFile.existsSync() || !bundledFile.existsSync()) {
+      fail('codemod script missing ($canonical or $bundled)');
+      continue;
+    }
     if (!listEquals(
       canonicalFile.readAsBytesSync(),
       bundledFile.readAsBytesSync(),

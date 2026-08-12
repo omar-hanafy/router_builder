@@ -241,10 +241,16 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     }
   }
 
+  /// The first positional argument, or `null` if the call is all-named.
+  ///
+  /// Since analyzer 13 an [ArgumentList] holds [Argument] nodes rather than
+  /// [Expression] nodes. A positional argument is still an [Expression]
+  /// (`Expression implements Argument`); a named one is a [NamedArgument],
+  /// which is not. The type test therefore selects positional arguments.
   Expression? _positionalExpr(InstanceCreationExpression? creation) {
     if (creation == null) return null;
     for (final arg in creation.argumentList.arguments) {
-      if (arg is! NamedExpression) return arg;
+      if (arg is Expression) return arg;
     }
     return null;
   }
@@ -254,11 +260,16 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     return expr is StringLiteral ? expr.stringValue : null;
   }
 
+  /// The expression bound to the named argument [name], if present.
+  ///
+  /// Since analyzer 13 a named argument is a [NamedArgument] whose `name` is a
+  /// [Token] (previously a `NamedExpression` wrapping a `Label`), and whose
+  /// value is exposed as `argumentExpression`.
   Expression? _namedExpr(InstanceCreationExpression? creation, String name) {
     if (creation == null) return null;
     for (final arg in creation.argumentList.arguments) {
-      if (arg is NamedExpression && arg.name.label.name == name) {
-        return arg.expression;
+      if (arg is NamedArgument && arg.name.lexeme == name) {
+        return arg.argumentExpression;
       }
     }
     return null;

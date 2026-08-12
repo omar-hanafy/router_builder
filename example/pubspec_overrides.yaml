@@ -1,0 +1,8 @@
+# Local development only — excluded from the published archive via .pubignore.
+#
+# example/pubspec.yaml declares a hosted router_builder_generator so the example
+# still resolves when it ships inside the router_builder archive. Locally we
+# want the sibling package in this repo instead.
+dependency_overrides:
+  router_builder_generator:
+    path: ../generator

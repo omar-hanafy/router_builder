@@ -13,8 +13,9 @@ THIS project wires routes.
 ## Step 1: Inspect the project before writing anything
 
 - Confirm the dependency and major version in `pubspec.yaml`
-  (`router_builder: ^3.x`). If it is 2.x, stop and use the
-  `migrate-v2-to-v3` skill first, or write v2-style code deliberately.
+  (`router_builder: ^3.x` or `^4.x`; route-definition syntax is identical in
+  both). If it is 2.x, stop and use the `migrate-v2-to-v3` skill first, or
+  write v2-style code deliberately.
 - Find the route idiom: `grep -rn "@RT()" lib/ | head`. Two conventions exist
   in the wild: one central routes class, or one `static const route =
   RouteInfo(...)` per screen file. FOLLOW the existing one; when a project

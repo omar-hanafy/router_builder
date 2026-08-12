@@ -22,10 +22,20 @@ plain globals), not in a new pattern.
 
 ```yaml
 dependencies:
-  router_builder: ^3.0.1
+  router_builder: ^4.0.0
 dev_dependencies:
   build_runner: ^2.15.0
+  router_builder_generator: ^4.0.0
 ```
+
+`router_builder_generator` is build-time only and MUST stay in
+`dev_dependencies`; putting it in `dependencies` drags `analyzer`, `build`,
+and `dart_style` into the app's production graph, which caps what the app can
+upgrade to and leaks the same cap to anything depending on it.
+
+v4 needs Flutter 3.44 or newer (its `analyzer >=13.0.0` floor needs
+`meta ^1.18.0`, which the Flutter SDK pins exactly). On an older SDK, install
+`router_builder: ^3.1.0` with no separate generator package instead.
 
 No consumer `build.yaml` is needed: the builder auto-applies to dependents and
 writes `lib/routes.g.dart` with classes `Routes` and `RoutesHelper`. Only add

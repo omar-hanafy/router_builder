@@ -1,6 +1,3 @@
-@Tags(['generator'])
-library;
-
 import 'package:build_test/build_test.dart';
 import 'package:test/test.dart';
 
@@ -61,10 +58,10 @@ void main() {
     await testBuilder(
       generator(),
       assets({'lib/app_routes.dart': _comprehensive}),
-      rootPackage: 'router_builder',
-      readerWriter: await reader(),
+      rootPackage: rootPackage,
+      readerWriter: stubReader(),
       outputs: {
-        'router_builder|lib/routes.g.dart': decodedMatches(
+        defaultOutput: decodedMatches(
           allOf(<Matcher>[
             // route constants (standard, top-level, branch, redirect)
             matches(RegExp(r'RouteInfo home = _i\d+\.AppRoutes\.home')),

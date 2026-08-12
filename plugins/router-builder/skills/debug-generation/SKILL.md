@@ -1,6 +1,6 @@
 ---
 name: debug-generation
-description: Use when router_builder code generation misbehaves - routes.g.dart missing, stale, or not updating, build_runner failing with RouterBuilderError (deep-link key conflicts, @RTConfig errors, branch enum mismatch), @RT routes not discovered, dependency solve failures around analyzer/build/source_gen/dart_style when adding or upgrading router_builder, or customizing builder options (output path, class names, fail_on_conflict).
+description: Use when router_builder code generation misbehaves - routes.g.dart missing, stale, or not updating, build_runner failing with RouterBuilderError (deep-link key conflicts, @RTConfig errors, branch enum mismatch), @RT routes not discovered, no builders applied after a v4 upgrade because router_builder_generator is missing from dev_dependencies, dependency solve failures around analyzer/build/source_gen/dart_style when adding or upgrading router_builder, or customizing builder options (output path, class names, fail_on_conflict).
 ---
 
 # Debug router_builder code generation
@@ -24,11 +24,15 @@ options, error catalog, and the troubleshooting sequence are in
    `dart run build_runner clean` and rebuild; then check for a consumer
    `build.yaml` overriding `output`.
 3. Dependency solve failures mentioning analyzer/build/source_gen/dart_style:
-   identify the pinning package from the solver output (`dart pub deps` helps),
-   upgrade it; router_builder 3.0.1 accepts `analyzer >=9.0.0 <13.0.0`. Use
-   `dependency_overrides` only as a diagnostic, never a committed fix. If the
-   project is still on router_builder 2.x, 2.0.3/2.0.4 exist specifically to
-   relax these ranges.
+   identify the pinning package from the solver output (`dart pub deps` helps)
+   and upgrade it. If `router_builder` itself is in the explanation, the
+   project is on 3.x or earlier, where the generator's deps were regular
+   `dependencies` and capped the app's build chain; the structural fix is the
+   4.x upgrade (`migrate-v3-to-v4`). In 4.x the constraint lives in
+   `router_builder_generator` (`analyzer >=13.0.0 <15.0.0`), and a conflict
+   naming `meta` means Flutter is older than 3.44. Use `dependency_overrides`
+   only as a diagnostic, never a committed fix. If the project is still on
+   router_builder 2.x, 2.0.3/2.0.4 exist specifically to relax these ranges.
 4. Customization requests (rename generated classes, move the output, keep
    v2-era names): use the builder options block from the reference, and keep
    any `build_extensions` redefinition consistent with `output`.

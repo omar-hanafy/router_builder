@@ -6,7 +6,9 @@ package `build.yaml` at v3.0.x.
 ## What the builder is
 
 One aggregating builder (`generateRouteInfoHelperBuilder`, exported from
-`package:router_builder/builder.dart`) that scans every resolvable library
+`package:router_builder_generator/builder.dart` in v4+, and from
+`package:router_builder/builder.dart` in 3.x and earlier) that scans every
+resolvable library
 under the consuming package's `lib/**.dart` and writes ONE output file.
 It ships with `auto_apply: dependents` and `build_to: source`, so a consumer
 app needs NO build.yaml at all for default behavior. Run:
@@ -115,10 +117,17 @@ runtime) cannot be extracted; keep `RouteInfo` names as literals.
 4. `Conflicting outputs` prompt (older build_runner only): rerun with
    `--delete-conflicting-outputs`.
 5. Dependency solve failures mentioning `analyzer`, `build`, `source_gen`, or
-   `dart_style`: router_builder 3.0.1+ allows `analyzer >=9.0.0 <13.0.0`.
-   Find the package pinning an incompatible range (`dart pub deps` or read the
-   solver output), upgrade it, and only use `dependency_overrides` as a
-   last-resort diagnostic, never a shipped fix.
+   `dart_style`: which package owns the constraint depends on the major.
+   In 3.x and earlier `router_builder` itself declared them as regular
+   `dependencies` (3.0.1+ allowed `analyzer >=9.0.0 <13.0.0`), so it caps the
+   app's build chain — the structural fix is the 4.x upgrade
+   (`migrate-v3-to-v4`), which moves them behind a `dev_dependency`. In 4.x
+   the constraint lives in `router_builder_generator`
+   (`analyzer >=13.0.0 <15.0.0`), and a failure naming `meta` means the
+   Flutter SDK is older than 3.44. Otherwise find the package pinning an
+   incompatible range (`dart pub deps` or read the solver output), upgrade it,
+   and only use `dependency_overrides` as a last-resort diagnostic, never a
+   shipped fix.
 6. Generated file has analyzer warnings in the IDE: the file starts with
    `ignore_for_file: type=lint`; project analysis_options that exclude
    `**/*.g.dart` are the conventional companion.

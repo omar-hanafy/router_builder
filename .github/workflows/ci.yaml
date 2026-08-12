@@ -6,7 +6,8 @@ on:
   pull_request:
 
 jobs:
-  package:
+  runtime:
+    name: router_builder (runtime)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,12 +19,63 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed .
       - run: dart analyze
       - run: flutter test
-      - run: dart test --run-skipped test/generator/
+      - name: Assert the runtime graph stays free of build-time packages
+        run: |
+          # The point of the v4 split: none of these may appear in a consumer's
+          # resolution. If one comes back, the package is capping consumers again.
+          for pkg in analyzer build dart_style source_gen glob; do
+            if grep -qE "^  $pkg:$" pubspec.lock; then
+              echo "::error::$pkg is back in the runtime dependency graph"
+              exit 1
+            fi
+          done
+          echo "runtime graph clean: $(grep -cE '^  [a-z_]+:$' pubspec.lock) packages"
       - name: Validate AI plugin tree
         run: dart tool/validate_plugin.dart
       - name: Publish dry run
         run: dart pub publish --dry-run
-      - name: Analyze example
+
+  generator:
+    name: router_builder_generator (analyzer ${{ matrix.analyzer }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of the declared `analyzer >=13.0.0 <15.0.0` range. The
+        # package is pure Dart precisely so this matrix is possible: a Flutter
+        # dependency would pin `meta` exactly and cap analyzer below 13.1.0.
+        analyzer: ['13.0.0', '>=13.0.0 <15.0.0']
+    defaults:
+      run:
+        working-directory: generator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub add "analyzer:${{ matrix.analyzer }}"
+      - run: dart pub get
+      - name: Show resolved build-chain versions
+        run: |
+          awk '/^  [a-z_]+:$/{p=$1} /version:/{gsub(/"/,"",$2); print p, $2}' \
+            pubspec.lock | grep -E '^(analyzer|build|dart_style|build_test):'
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: dart analyze
+      - run: dart test
+      - name: Publish dry run
+        if: matrix.analyzer != '13.0.0'
+        run: dart pub publish --dry-run
+
+  example:
+    name: example (end-to-end build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build and verify generated output
         run: |
           cd example
           flutter pub get

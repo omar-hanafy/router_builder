@@ -1,6 +1,3 @@
-@Tags(['generator'])
-library;
-
 import 'package:build_test/build_test.dart';
 import 'package:test/test.dart';
 
@@ -29,8 +26,8 @@ void main() {
     final result = await testBuilder(
       generator(),
       assets({'lib/app_routes.dart': _conflict}),
-      rootPackage: 'router_builder',
-      readerWriter: await reader(),
+      rootPackage: rootPackage,
+      readerWriter: stubReader(),
       onLog: (_) {},
     );
     expect(result.succeeded, isFalse);
@@ -41,14 +38,10 @@ void main() {
     await testBuilder(
       generator({'fail_on_conflict': false}),
       assets({'lib/app_routes.dart': _conflict}),
-      rootPackage: 'router_builder',
-      readerWriter: await reader(),
+      rootPackage: rootPackage,
+      readerWriter: stubReader(),
       onLog: (_) {},
-      outputs: {
-        'router_builder|lib/routes.g.dart': decodedMatches(
-          contains('deepLinkMap'),
-        ),
-      },
+      outputs: {defaultOutput: decodedMatches(contains('deepLinkMap'))},
     );
   });
 }
