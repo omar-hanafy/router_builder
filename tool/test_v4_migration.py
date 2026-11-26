@@ -2,6 +2,7 @@
 """Verify the v3 builder migration against a published and a local package graph."""
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -15,8 +16,8 @@ FIXTURES = GENERATOR / "test_fixes"
 CODEMOD = ROOT / "tool" / "migrate_to_v4.sh"
 
 
-def run(args, cwd):
-    result = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+def run(args, cwd, *, umask=-1):
+    result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, umask=umask)
     if result.returncode:
         raise RuntimeError(f"{' '.join(map(str, args))}\n{result.stdout}{result.stderr}")
     return result.stdout + result.stderr
@@ -91,6 +92,13 @@ def check_codemod(temp, codemod=CODEMOD):
     cases.append(("new_block", "pubspec.yaml", "name: app\ndependencies:\n" + runtime + uses_runner,
                   "name: app\ndev_dependencies:\n" + gen + "\ndependencies:\n" + runtime.replace("^3.1.0", "^4.0.0") + uses_runner))
     cases.append(("crlf", "pubspec.yaml", manifest.replace("\n", "\r\n"), migrated.replace("\n", "\r\n")))
+    cr_build = f"global_options:\r  elsewhere:wrap:\r    runs_before:\r      - {old_key}\r"
+    cases.extend([("cr", "pubspec.yaml", manifest.replace("\n", "\r"), migrated.replace("\n", "\r")),
+                  ("cr", "build.yaml", cr_build, cr_build.replace(old_key, new_key))])
+    mixed = manifest.replace("\n", "\r\n").replace("\r\n", "\r", 1)
+    cases.append(("mixed_endings", "pubspec.yaml", mixed, mixed.replace("^3.1.0", "^4.0.0").replace(
+        "  build_runner:", gen.replace("\n", "\r") + "  build_runner:"
+    )))
     old_pipe, new_pipe = old_key.replace(":", "|"), new_key.replace(":", "|")
     pipe_build = build.replace(old_key, old_pipe)
     new_pipe_build = new_build.replace(f"note: {old_key}", f"note: {old_pipe}").replace(
@@ -98,6 +106,13 @@ def check_codemod(temp, codemod=CODEMOD):
     )
     cases.extend([("legacy_pipe", "pubspec.yaml", manifest, migrated),
                   ("legacy_pipe", "build.yaml", pipe_build, new_pipe_build)])
+    flow_forms = {
+        "flow_builder_list": f"global_options:\n  elsewhere:wrap:\n    runs_before: [{old_pipe}]\n",
+        "flow_builder_map": f"targets:\n  $default:\n    builders: {{{old_pipe}: {{}}}}\n",
+    }
+    for label, source in flow_forms.items():
+        cases.extend([(label, "pubspec.yaml", manifest, migrated),
+                      (label, "build.yaml", source, source.replace(old_pipe, f"'{new_key}'"))])
     for label, reference in [("colon_order", old_key), ("pipe_order", old_pipe)]:
         source = f"global_options:\n  elsewhere:wrap:\n    runs_before: ['{reference}']\n"
         cases.extend([(label, "pubspec.yaml", manifest, migrated),
@@ -157,15 +172,88 @@ def check_codemod(temp, codemod=CODEMOD):
     preview = run(["bash", str(codemod), str(temp)], temp)
     if "--- " not in preview or any(p.read_bytes() != data for p, data in originals.items()):
         raise AssertionError("The preview must show a diff and preserve all inputs")
-    run(["bash", str(codemod), "--write", str(temp)], temp)
+    applied = run(["bash", str(codemod), "--write", str(temp)], temp)
+    # Check the semantic values with the parser used by the codemod itself.
+    flow_list, flow_map = json.loads(run([
+        "ruby", "-rpsych", "-rjson", "-e",
+        "puts JSON.generate(ARGV.map { |file| Psych.safe_load(File.read(file)) })",
+        *(temp / name / "build.yaml" for name in flow_forms),
+    ], temp))
+    if (flow_list["global_options"]["elsewhere:wrap"]["runs_before"] != [new_key]
+            or flow_map["targets"]["$default"]["builders"] != {new_key: {}}):
+        raise AssertionError("The migrated flow collections must contain the canonical builder key")
     mismatches = [str(path.relative_to(temp)) for path, data in expected.items() if path.read_bytes() != data]
     missing_notices = sorted(name for name in manual if f"Review {temp / name} manually:" not in preview)
     if mismatches or missing_notices:
         raise AssertionError(f"Unexpected YAML outputs: {mismatches}\nMissing manual reviews: {missing_notices}")
     second = run(["bash", str(codemod), "--write", str(temp)], temp)
+    changed_dirs = {path.parent for path, data in expected.items() if data != originals[path]}
+    if any(f"Review {path} manually:" in result for path in changed_dirs for result in (preview, applied, second)):
+        raise AssertionError("A migrated package unexpectedly needed manual review")
     if "Updated 0 file(s)." not in second or any(p.read_bytes() != data for p, data in expected.items()):
         raise AssertionError("Second migration changed an already migrated fixture")
     print(f"YAML migration passed for {len(cases)} files, including preview and repeat runs.", flush=True)
+
+
+def check_package_boundaries(app, command):
+    old = b"export 'package:router_builder/builder.dart';\n"
+    new = b"export 'package:router_builder_generator/builder.dart';\n"
+    nested = [
+        app / "packages" / "v3_tools",
+        app / "lib" / "fixtures" / "v3_example",
+    ]
+    legacy_files = []
+    for package in nested:
+        source = package / "lib" / "legacy.dart"
+        source.parent.mkdir(parents=True)
+        (package / "pubspec.yaml").write_text(
+            f"name: {package.name}\n"
+            "environment:\n  sdk: ^3.11.0\ndependencies:\n  router_builder: 3.1.0\n"
+        )
+        source.write_bytes(old)
+        legacy_files.append(source)
+
+    targets = {app / "lib" / "group_writable.dart": 0o664, app / "lib" / "executable.dart": 0o755}
+    for source, mode in targets.items():
+        source.write_bytes(old)
+        if os.name == "posix":
+            source.chmod(mode)
+    preview = run(command, app)
+    if any(str(p.resolve()) in preview for p in legacy_files):
+        raise AssertionError("Default preview entered a nested package")
+    if any(source.read_bytes() != old for source in [*targets, *legacy_files]):
+        raise AssertionError("The preview changed a source file")
+    run(command + ["--write"], app, umask=0o077 if os.name == "posix" else -1)
+    if any(p.read_bytes() != old for p in legacy_files):
+        raise AssertionError("Default write migrated a nested v3 package")
+    for source, mode in targets.items():
+        if source.read_bytes() != new:
+            raise AssertionError(f"Default write missed {source}")
+        if os.name == "posix" and source.stat().st_mode & 0o7777 != mode:
+            raise AssertionError(f"Atomic migration changed mode {mode:o} for {source}")
+
+    # An explicitly chosen package is its own root, and a file is also a target.
+    run(command + ["--write", str(nested[0]), str(legacy_files[1])], app)
+    if any(p.read_bytes() != new for p in legacy_files):
+        raise AssertionError("An explicit nested package or file was skipped")
+    if os.name == "posix":
+        # The OS resolves ".." after following the parent symlink. Each
+        # lexically similar file is a negative control for a wrong-file write.
+        aliases, physical = app / "aliases", app / "physical"
+        (physical / "inner").mkdir(parents=True)
+        aliases.mkdir()
+        link = aliases / "shortcut"
+        link.symlink_to(physical / "inner", target_is_directory=True)
+        names = ["provided.dart", "directory/entry.dart"]
+        for parent in (aliases, physical):
+            (parent / "directory").mkdir()
+            for name in names:
+                (parent / name).write_bytes(old)
+        run(command + ["--write", str(link / ".." / names[0]), str(link / ".." / "directory")], app)
+        for name in names:
+            if (physical / name).read_bytes() != new or (aliases / name).read_bytes() != old:
+                raise AssertionError(f"An explicit symlink-parent path rewrote the wrong file for {name}")
+    print("Package boundaries, explicit nested targets and atomic write permissions passed.", flush=True)
 
 
 def check_dart_fixes(app, *, standalone=False):
@@ -239,6 +327,7 @@ def check_dart_fixes(app, *, standalone=False):
                 raise AssertionError(f"The Dart element fix differs from {path.name}.expect")
     run(["dart", "analyze", "--fatal-infos", "lib"], app)
     print("The directive and Dart fix consumers analyze cleanly.", flush=True)
+    check_package_boundaries(app, command)
 
 
 if __name__ == "__main__":

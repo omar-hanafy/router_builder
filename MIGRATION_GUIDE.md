@@ -109,8 +109,10 @@ dart run router_builder_generator:migrate_builder_imports --write
 The command changes the URI to `package:router_builder_generator/builder.dart`,
 including alternatives in conditional imports and exports. It preserves prefixes,
 `show` and `hide` clauses, comments, and ordinary string literals. To limit the
-scope, pass one or more Dart source files or directories. Repeating the command
-after migration reports zero changes. You can also edit the old URI directly.
+scope, pass one or more Dart source files or directories. Each selected directory
+is scanned up to nested package boundaries. Pass a nested package directory or
+a file inside it explicitly when that package is also upgrading. Repeating the
+command after migration reports zero changes. You can also edit the old URI directly.
 
 The deprecated runtime library points developers to the generator, where
 `generateRouteInfoHelperBuilder` and `RouterBuilderError` keep their names.

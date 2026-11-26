@@ -40,9 +40,10 @@ void main(List<String> arguments) {
     for (final path in paths.isEmpty ? ['.'] : paths) {
       switch (FileSystemEntity.typeSync(path, followLinks: false)) {
         case FileSystemEntityType.directory:
-          files.addAll(_dartFiles(Directory(path)));
+          final directory = Directory(path).resolveSymbolicLinksSync();
+          files.addAll(_dartFiles(Directory(directory)));
         case FileSystemEntityType.file when path.endsWith('.dart'):
-          files.add(File(path).absolute.uri.normalizePath().toFilePath());
+          files.add(File(path).resolveSymbolicLinksSync());
         default:
           throw FileSystemException('Expected a Dart file or directory', path);
       }
@@ -66,12 +67,15 @@ void main(List<String> arguments) {
 Iterable<String> _dartFiles(Directory directory) sync* {
   for (final entity in directory.listSync(followLinks: false)) {
     if (entity is File && entity.path.endsWith('.dart')) {
-      yield entity.absolute.uri.normalizePath().toFilePath();
+      yield entity.path;
     } else if (entity is Directory) {
       final name = entity.path.split(Platform.pathSeparator).last;
-      if (!name.startsWith('.') && name != 'build') {
-        yield* _dartFiles(entity);
+      if (name.startsWith('.') ||
+          name == 'build' ||
+          File.fromUri(entity.uri.resolve('pubspec.yaml')).existsSync()) {
+        continue;
       }
+      yield* _dartFiles(entity);
     }
   }
 }
@@ -126,12 +130,28 @@ int _migrate(File file, {required bool write}) {
       bytes[2] == 0xbf;
   final temp = file.parent.createTempSync('.router-builder-migration-');
   try {
-    // A sibling copy carries the file mode and can be renamed atomically.
+    // A sibling temporary file can replace the source atomically.
     final replacement = file.copySync('${temp.path}/source.dart');
     replacement.writeAsStringSync(
       bom ? '\uFEFF$updated' : updated,
       flush: true,
     );
+    if (Platform.isLinux || Platform.isMacOS) {
+      // File.copySync on Linux applies the process umask to the new file.
+      final mode = file.statSync().mode & 0xfff;
+      if ((replacement.statSync().mode & 0xfff) != mode) {
+        final chmod = Process.runSync('chmod', [
+          mode.toRadixString(8),
+          replacement.path,
+        ]);
+        if (chmod.exitCode != 0) {
+          throw FileSystemException(
+            'Could not preserve permissions: ${chmod.stderr}',
+            file.path,
+          );
+        }
+      }
+    }
     replacement.renameSync(file.path);
   } finally {
     temp.deleteSync(recursive: true);

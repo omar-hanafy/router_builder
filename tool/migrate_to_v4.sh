@@ -51,17 +51,22 @@ end
 
 # Keep the original quotes, spacing and comments. Positions refer to Unicode
 # characters in the original text. Apply edits in reverse source order.
-def scalar_edit(node, replacement)
+def scalar_edit(node, replacement, quote_plain: false)
   if node.start_line != node.end_line || node.anchor || node.tag
     raise ManualEdit, 'review the tagged, anchored, or multiline value'
   end
   quote = {Psych::Nodes::Scalar::DOUBLE_QUOTED => '"',
-           Psych::Nodes::Scalar::SINGLE_QUOTED => "'"}.fetch(node.style, '')
+           Psych::Nodes::Scalar::SINGLE_QUOTED => "'"}.fetch(node.style, quote_plain ? "'" : '')
   [node.start_line, node.start_column, node.end_column, "#{quote}#{replacement}#{quote}"]
 end
 
+def source_lines(text)
+  # Match libyaml's line positions while retaining each original terminator.
+  text.scan(/[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+/)
+end
+
 def apply_edits(text, edits)
-  lines = text.lines
+  lines = source_lines(text)
   edits.sort.reverse_each do |line, start_column, end_column, value|
     lines[line] ||= ''
     lines[line][start_column...end_column] = value
@@ -129,11 +134,11 @@ def migrate_pubspec(path, text)
     unless key.start_column.zero? && key.start_line == key.end_line
       raise ManualEdit, 'add the generator to the indented or explicit dependency section'
     end
-    newline = text.include?("\r\n") ? "\r\n" : "\n"
+    newline = text[/\r\n|\r|\n/] || "\n"
     if section
       line = section.first.start_line + 1
       indentation = dev_deps.empty? ? 2 : dev_deps.values.first.first.start_column
-      prefix = line == text.lines.size && !text.end_with?("\n") ? newline : ''
+      prefix = line == source_lines(text).size && !text.end_with?("\r", "\n") ? newline : ''
       edits << [line, 0, 0, "#{prefix}#{' ' * indentation}#{GENERATOR}: #{VERSION}#{newline}"]
     else
       # Insert next to dependencies, including when the document ends with "...".
@@ -156,12 +161,19 @@ rescue Psych::BadAlias, Psych::DisallowedClass
   raise ManualEdit, 'review the YAML aliases or custom value types'
 end
 
-def rename_builder_names(nodes, edits)
+def rename_builder_names(nodes, edits, flow:)
   matches = nodes.select { |node| [OLD_KEY, NEW_KEY].include?(node.value.sub('|', ':')) }
   old = matches.find { |node| node.value.sub('|', ':') == OLD_KEY }
   return unless old
   raise ManualEdit, 'multiple spellings of the builder are already present' if matches.size > 1
-  edits << scalar_edit(old, NEW_KEY)
+  # Some libyaml versions require quotes around a colon inside a flow scalar.
+  edits << scalar_edit(old, NEW_KEY, quote_plain: flow)
+end
+
+def rename_builder_keys(mapping, edits)
+  definitions = entries(mapping)
+  rename_builder_names(definitions.values.map(&:first), edits, flow: mapping&.style == Psych::Nodes::Mapping::FLOW)
+  definitions
 end
 
 def rename_builder_list(list, edits)
@@ -169,19 +181,17 @@ def rename_builder_list(list, edits)
   unless list.is_a?(Psych::Nodes::Sequence) && list.children.all? { |node| node.is_a?(Psych::Nodes::Scalar) }
     raise ManualEdit, 'review the builder name list or alias'
   end
-  rename_builder_names(list.children, edits)
+  rename_builder_names(list.children, edits, flow: list.style == Psych::Nodes::Sequence::FLOW)
 end
 
 def migrate_build(text)
   config = entries(document(text))
   edits = []
-  globals = entries(config.dig('global_options', 1))
-  rename_builder_names(globals.values.map(&:first), edits)
-  rename_builder_names(entries(config.dig('triggers', 1)).values.map(&:first), edits)
+  globals = rename_builder_keys(config.dig('global_options', 1), edits)
+  rename_builder_keys(config.dig('triggers', 1), edits)
   globals.each_value { |_, options| rename_builder_list(entries(options).dig('runs_before', 1), edits) }
   entries(config.dig('targets', 1)).each_value do |_, target|
-    builders = entries(entries(target).dig('builders', 1))
-    rename_builder_names(builders.values.map(&:first), edits)
+    rename_builder_keys(entries(target).dig('builders', 1), edits)
   end
   %w[builders post_process_builders].each do |kind|
     entries(config.dig(kind, 1)).each_value do |_, definition|
@@ -193,7 +203,9 @@ def migrate_build(text)
       end
     end
   end
-  apply_edits(text, edits)
+  updated = apply_edits(text, edits)
+  document(updated) unless edits.empty?
+  updated
 end
 
 write = false
