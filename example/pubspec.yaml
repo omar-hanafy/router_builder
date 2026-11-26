@@ -18,11 +18,4 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
-  # Use the public split revision until the first hosted generator is available.
-  # Local development resolves the sibling package via pubspec_overrides.yaml.
-  router_builder_generator:
-    version: ^4.0.0
-    git:
-      url: https://github.com/omar-hanafy/router_builder
-      ref: 70751510b4413966c3343ec691264fd848680a25
-      path: generator
+  router_builder_generator: ^4.0.0
