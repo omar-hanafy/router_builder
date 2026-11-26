@@ -68,6 +68,12 @@ jobs:
           dart pub get
           dart format --output=none --set-exit-if-changed .
           dart pub publish --dry-run
+      - name: Require full pub points
+        if: matrix.lane == 'latest'
+        working-directory: generator
+        run: |
+          dart pub global activate pana 0.23.14
+          pana --exit-code-threshold 0 .
 
   example:
     name: example (Flutter ${{ matrix.version || 'stable' }})

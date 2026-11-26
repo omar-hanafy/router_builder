@@ -116,5 +116,8 @@ together.
 
 Use annotated `router_builder-vX.Y.Z` tags for the runtime and
 `router_builder_generator-vX.Y.Z` tags for the generator. Tag the reviewed
-merge on `main` and keep every release tag immutable. A generator release
-does not authorize a runtime tag or upload.
+merge on `main` and keep every release tag immutable. The generator CI
+requires full points from `pana --exit-code-threshold 0 .` in `generator/`.
+The generator tag workflow validates the manually published first version
+and publishes later versions through pub.dev Trusted Publisher. Authorize
+runtime tags and uploads separately.
