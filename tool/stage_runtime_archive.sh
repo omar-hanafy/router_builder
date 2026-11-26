@@ -40,7 +40,18 @@ for file in pubspec.yaml lib/router_builder.dart example/pubspec.yaml example/li
     exit 1
   fi
 done
-(cd "$scratch/unpacked/example" && flutter pub get)
+(
+  cd "$scratch/unpacked/example"
+  flutter pub get
+  dart pub deps --json | python3 -c '
+import json, sys
+packages = json.load(sys.stdin)["packages"]
+generator = next((p for p in packages if p["name"] == "router_builder_generator"), {})
+if generator.get("source") != "hosted":
+    sys.exit("The archived example must resolve router_builder_generator from the registry.")
+print("Archived example resolved hosted router_builder_generator", generator["version"])
+'
+)
 
 mv -n "$archive" "$output"
 if [[ -e "$archive" ]]; then
