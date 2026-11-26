@@ -1,134 +1,216 @@
 #!/usr/bin/env bash
-#
-# migrate_to_v4.sh - safe, purely-textual codemods to help upgrade an app
-# from router_builder v3 to v4.
-#
-# v4 splits the code generator out of `router_builder` into a separate
-# build-time package, `router_builder_generator`, so that analyzer/build/
-# dart_style no longer sit in an app's production dependency graph and can no
-# longer cap the versions the app is allowed to resolve.
-#
-# Your Dart source does NOT change: the import stays
-# `package:router_builder/router_builder.dart`. The migration is a pubspec
-# change plus, if you have one, a build.yaml builder-key rename.
-#
-# Run it from your app's root, ideally on a clean git tree so you can review
-# the diff. It is a DRY-RUN by default: it prints what would change and edits
-# nothing. Re-run with --write to apply.
-#
-# Usage:
-#   tool/migrate_to_v4.sh [--write] [path ...]
-#
-#   path        one or more files/dirs to scan (default: current directory)
-#   -w, --write apply changes in place (default: dry-run preview)
-#   -h, --help  show this help and exit
-#
-# What it rewrites (only the reliable, mechanical changes):
-#   - pubspec.yaml: `router_builder:` hosted constraint -> ^4.0.0
-#   - pubspec.yaml: adds `router_builder_generator: ^4.0.0` to dev_dependencies
-#                   (inserted first in the block; re-sort by hand if you enable
-#                    the `sort_pub_dependencies` lint)
-#   - build.yaml:   builder key `router_builder:generate_route_info_helper`
-#                   -> `router_builder_generator:generate_route_info_helper`
-#
-# What it deliberately does NOT touch:
-#   - path/git `router_builder` dependencies (your override is intentional)
-#   - anything in your Dart sources - v4 changes no runtime API
-#
-# After running, regenerate: `dart run build_runner build`
-#
-# Idempotent: running it again on already-migrated code changes nothing.
+# Preview or apply the v3 to v4 YAML edits for packages using router_builder.
+# Ruby's standard YAML parser supplies source positions so comments and custom
+# dependency sources survive. No gems or network access are required.
+set -eu
+exec ruby - "$@" <<'RUBY'
+require 'find'
+require 'open3'
+require 'optparse'
+require 'psych'
+require 'set'
+require 'tempfile'
 
-set -euo pipefail
+RUNTIME = 'router_builder'
+GENERATOR = 'router_builder_generator'
+VERSION = '^4.0.0'
+OLD_KEY = 'router_builder:generate_route_info_helper'
+NEW_KEY = 'router_builder_generator:generate_route_info_helper'
+OLD_URI = 'package:router_builder/builder.dart'
+NEW_URI = 'package:router_builder_generator/builder.dart'
 
-usage() {
-  sed -n '3,40p' "$0" | sed 's/^#\{0,1\} \{0,1\}//'
-}
+class ManualEdit < StandardError; end
 
-write=0
-paths=()
+# Read the syntax tree without constructing user-supplied YAML objects.
+def document(text)
+  docs = Psych.parse_stream(text).children
+  raise ManualEdit, 'expected one YAML mapping' unless docs.size == 1 &&
+    docs.first.root.is_a?(Psych::Nodes::Mapping)
+  docs.first.root
+end
 
-while [ $# -gt 0 ]; do
-  case "$1" in
-    -w|--write) write=1; shift ;;
-    -h|--help) usage; exit 0 ;;
-    --) shift; while [ $# -gt 0 ]; do paths+=("$1"); shift; done ;;
-    -*) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
-    *) paths+=("$1"); shift ;;
-  esac
-done
+def entries(node)
+  return {} if node.nil?
+  raise ManualEdit, 'review the YAML mapping or alias' unless node.is_a?(Psych::Nodes::Mapping)
+  raise ManualEdit, 'review the anchored or tagged YAML mapping' if node.anchor || node.tag
+  result = {}
+  node.children.each_slice(2) do |key, value|
+    unless key.is_a?(Psych::Nodes::Scalar) && key.value != '<<' && !result.key?(key.value)
+      raise ManualEdit, 'review the merged, complex, or duplicate YAML keys'
+    end
+    result[key.value] = [key, value]
+  end
+  result
+end
 
-if [ ${#paths[@]} -eq 0 ]; then
-  paths=(".")
-fi
+def constrained_version?(node, major)
+  return false unless node.is_a?(Psych::Nodes::Scalar)
+  patch = "#{major}\\.\\d+\\.\\d+"
+  /\A(?:\^?#{patch}|>=#{patch}\s+<#{major + 1}\.0\.0)\z/.match?(node.value)
+end
 
-command -v perl >/dev/null 2>&1 || {
-  echo "error: this script needs perl (preinstalled on macOS and most Linux)." >&2
-  exit 1
-}
+# Keep the original quotes, spacing and comments. Positions refer to Unicode
+# characters in the original text. Apply edits in reverse source order.
+def scalar_edit(node, replacement)
+  if node.start_line != node.end_line || node.anchor || node.tag
+    raise ManualEdit, 'review the tagged, anchored, or multiline value'
+  end
+  quote = {Psych::Nodes::Scalar::DOUBLE_QUOTED => '"',
+           Psych::Nodes::Scalar::SINGLE_QUOTED => "'"}.fetch(node.style, '')
+  [node.start_line, node.start_column, node.end_column, "#{quote}#{replacement}#{quote}"]
+end
 
-# pubspec.yaml codemod. Applied to the whole file at once.
-read -r -d '' pubspec_codemod <<'PERL' || true
-# 1. Bump a hosted router_builder constraint to ^4.0.0. The constraint must be
-#    non-empty and on the same line: a path/git dependency writes a bare
-#    `router_builder:` with the source on following lines, and rewriting that
-#    would orphan those lines, so it is left alone.
-s{^([ \t]*)router_builder:[ \t]*(['"]?)([^\s'"][^\n'"]*?)\2[ \t]*$}{$1router_builder: ^4.0.0}mg;
+def apply_edits(text, edits)
+  lines = text.lines
+  edits.sort.reverse_each do |line, start_column, end_column, value|
+    lines[line] ||= ''
+    lines[line][start_column...end_column] = value
+  end
+  lines.join
+end
 
-# 2. Ensure router_builder_generator is a dev_dependency (idempotent).
-unless (/^[ \t]*router_builder_generator[ \t]*:/m) {
-  if (/^dev_dependencies:[ \t]*$/m) {
-    s{^dev_dependencies:[ \t]*$}{dev_dependencies:\n  router_builder_generator: ^4.0.0}m;
-  } else {
-    $_ .= "\ndev_dependencies:\n  router_builder_generator: ^4.0.0\n";
-  }
-}
-PERL
+def dependencies(section)
+  return {} unless section
+  value = section.last
+  return {} if value.is_a?(Psych::Nodes::Scalar) && value.value.empty? && value.plain
+  entries(value)
+end
 
-# build.yaml codemod: the builder moved packages, so its key changed.
-read -r -d '' buildyaml_codemod <<'PERL' || true
-s/\brouter_builder:generate_route_info_helper\b/router_builder_generator:generate_route_info_helper/g;
-# `- router_builder` under a builders/global_options list refers to the builder
-# package; only rewrite when it is qualified with the builder name above.
-PERL
+def overrides?(manifest)
+  overrides = dependencies(manifest['dependency_overrides'])
+  overrides.key?(RUNTIME) || overrides.key?(GENERATOR)
+end
 
-changed=0
-scanned=0
-tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
+def migrate_pubspec(path, text)
+  root = document(text)
+  manifest = entries(root)
+  runtime_deps = dependencies(manifest['dependencies'])
+  dev_deps = dependencies(manifest['dev_dependencies'])
+  runtime = runtime_deps[RUNTIME] || dev_deps[RUNTIME]
+  return unless runtime
+  if runtime_deps.key?(RUNTIME) && dev_deps.key?(RUNTIME)
+    raise ManualEdit, 'router_builder appears in both dependency sections'
+  end
+  if overrides?(manifest)
+    raise ManualEdit, 'preserve the explicit dependency override'
+  end
+  local = File.join(File.dirname(path), 'pubspec_overrides.yaml')
+  if File.file?(local) && overrides?(entries(document(File.read(local))))
+    raise ManualEdit, 'preserve the dependency in pubspec_overrides.yaml'
+  end
+  if !constrained_version?(runtime.last, 3) && !constrained_version?(runtime.last, 4)
+    raise ManualEdit, 'review the router_builder constraint or custom source'
+  end
 
-apply() {
-  local file="$1" codemod="$2"
-  scanned=$((scanned + 1))
-  perl -0777 -pe "$codemod" "$file" > "$tmp"
-  if ! cmp -s "$file" "$tmp"; then
-    changed=$((changed + 1))
-    if [ "$write" -eq 1 ]; then
-      cat "$tmp" > "$file"   # truncate-in-place: keeps the file's permissions
-      echo "updated: $file"
+  edits = []
+  edits << scalar_edit(runtime.last, VERSION) if constrained_version?(runtime.last, 3)
+  generator = runtime_deps[GENERATOR] || dev_deps[GENERATOR]
+  if generator
+    raise ManualEdit, 'review the existing generator constraint or custom source' unless constrained_version?(generator.last, 4)
+  else
+    section = manifest['dev_dependencies']
+    dev_map = section&.last
+    inline_dev_map = dev_map.is_a?(Psych::Nodes::Mapping) && dev_map.style == Psych::Nodes::Mapping::FLOW
+    if root.style == Psych::Nodes::Mapping::FLOW || inline_dev_map
+      raise ManualEdit, 'add the generator to the inline dependency mapping'
+    end
+    newline = text.include?("\r\n") ? "\r\n" : "\n"
+    if section
+      line = section.first.start_line + 1
+      indentation = dev_deps.empty? ? 2 : dev_deps.values.first.first.start_column
+      prefix = line == text.lines.size && !text.end_with?("\n") ? newline : ''
+      edits << [line, 0, 0, "#{prefix}#{' ' * indentation}#{GENERATOR}: #{VERSION}#{newline}"]
     else
-      echo "would update: $file"
-      diff -u "$file" "$tmp" || true
-      echo ""
-    fi
-  fi
-}
+      # Insert next to dependencies, including when the document ends with "...".
+      line = manifest.fetch('dependencies').first.start_line
+      edits << [line, 0, 0, "dev_dependencies:#{newline}  #{GENERATOR}: #{VERSION}#{newline}#{newline}"]
+    end
+  end
+  apply_edits(text, edits)
+end
 
-while IFS= read -r file; do
-  apply "$file" "$pubspec_codemod"
-done < <(find "${paths[@]}" -type f -name 'pubspec.yaml' \
-           ! -path '*/.*' ! -path '*/build/*' 2>/dev/null | sort)
+def rename_builder(mapping, edits)
+  definitions = entries(mapping)
+  return unless definitions.key?(OLD_KEY)
+  raise ManualEdit, 'both builder names are already present' if definitions.key?(NEW_KEY)
+  edits << scalar_edit(definitions.fetch(OLD_KEY).first, NEW_KEY)
+end
 
-while IFS= read -r file; do
-  apply "$file" "$buildyaml_codemod"
-done < <(find "${paths[@]}" -type f -name 'build.yaml' \
-           ! -path '*/.*' ! -path '*/build/*' 2>/dev/null | sort)
+def migrate_build(text)
+  config = entries(document(text))
+  edits = []
+  rename_builder(config.dig('global_options', 1), edits)
+  entries(config.dig('targets', 1)).each_value do |_, target|
+    rename_builder(entries(target).dig('builders', 1), edits)
+  end
+  %w[builders post_process_builders].each do |kind|
+    entries(config.dig(kind, 1)).each_value do |_, definition|
+      fields = entries(definition)
+      uri = fields.dig('import', 1)
+      edits << scalar_edit(uri, NEW_URI) if uri.is_a?(Psych::Nodes::Scalar) && uri.value == OLD_URI
+      %w[applies_builders runs_before].each do |field|
+        list = fields.dig(field, 1)
+        next unless list.is_a?(Psych::Nodes::Sequence)
+        list.children.each do |entry|
+          edits << scalar_edit(entry, NEW_KEY) if entry.is_a?(Psych::Nodes::Scalar) && entry.value == OLD_KEY
+        end
+      end
+    end
+  end
+  apply_edits(text, edits)
+end
 
-echo ""
-if [ "$write" -eq 1 ]; then
-  echo "done: $changed of $scanned file(s) updated."
-  echo "next: dart run build_runner build"
-else
-  echo "dry-run: $changed of $scanned file(s) would change."
-  echo "re-run with --write to apply (review the diff above first)."
-fi
+write = false
+OptionParser.new do |options|
+  options.banner = 'Usage: migrate_to_v4.sh [--write] [directories or pubspec.yaml/build.yaml files]'
+  options.on('-w', '--write', 'Apply the YAML changes (default: print a diff)') { write = true }
+  options.on('-h', '--help', 'Show usage') { puts options; exit }
+end.parse!
+files = Set.new
+(ARGV.empty? ? ['.'] : ARGV).each do |path|
+  abort "Missing path: #{path}" unless File.exist?(path)
+  Find.find(path) do |file|
+    next if File.symlink?(file)
+    name = File.basename(file)
+    if File.directory?(file)
+      Find.prune if file != path && (name.start_with?('.') || name == 'build')
+    elsif %w[pubspec.yaml build.yaml].include?(name)
+      files.add(File.expand_path(file))
+    end
+  end
+end
+
+changed = 0
+files.group_by { |file| File.dirname(file) }.sort.each do |dir, selected|
+  pubspec = File.join(dir, 'pubspec.yaml')
+  next unless File.file?(pubspec) && !File.symlink?(pubspec)
+  begin
+    updated = migrate_pubspec(pubspec, File.read(pubspec))
+    next unless updated
+    changes = {}
+    changes[pubspec] = updated if selected.include?(pubspec)
+    build = File.join(dir, 'build.yaml')
+    changes[build] = migrate_build(File.read(build)) if selected.include?(build)
+    changes.each do |path, content|
+      next if File.read(path) == content
+      if write
+        Tempfile.create(['.router-migration-', '.tmp'], dir) do |temp|
+          temp.chmod(File.stat(path).mode & 07777)
+          temp.write(content)
+          temp.close
+          File.rename(temp.path, path)
+        end
+        puts "Updated #{path}"
+      else
+        diff, status = Open3.capture2('diff', '-u', '-L', path, '-L', path, path, '-', stdin_data: content)
+        abort "Could not preview #{path}" if status.exitstatus != 1
+        puts diff
+      end
+      changed += 1
+    end
+  rescue ManualEdit, Psych::SyntaxError => error
+    warn "Review #{dir} manually: #{error.message}"
+  end
+end
+puts "#{write ? 'Updated' : 'Would update'} #{changed} file(s)."
+RUBY

@@ -29,7 +29,7 @@ to its dedicated skill. Never guess the version from imports alone.
 | From -> To | Path |
 |---|---|
 | 4.x -> newer 4.x | Bump constraint (both packages, they release in lockstep), `flutter pub get`, `dart run build_runner build`, `dart analyze`, run tests. |
-| 3.x -> 4.x | BREAKING, but pubspec-only. Use the `migrate-v3-to-v4` skill (codemod + regenerate). No Dart source changes. |
+| 3.x -> 4.x | Use `migrate-v3-to-v4` for the generator dependency and build configuration. Migrate custom builder imports and exports with `dart fix`, then regenerate. |
 | 3.x -> newer 3.x | Bump constraint, `flutter pub get`, `dart run build_runner build`, `dart analyze`, run tests. 3.0.1 only relaxed the analyzer constraint; no code changes. |
 | 2.x -> 4.x | Two hops: `migrate-v2-to-v3`, then `migrate-v3-to-v4`. |
 | 2.x -> 3.x | BREAKING. Use the `migrate-v2-to-v3` skill (codemod + manual policy folds + regenerate + host audit). |

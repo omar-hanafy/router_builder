@@ -44,51 +44,31 @@ means in practice:
 removes the cap structurally rather than by widening a bound every time the
 ecosystem publishes a new analyzer major.
 
-## The Flutter SDK floor (the part that surprises people)
+## SDK compatibility
 
-`analyzer >=13.1.0` requires `meta ^1.18.3`. The Flutter SDK pins `meta` to an
-**exact** version in both `packages/flutter` and `packages/flutter_test`, so
-the installed Flutter decides which analyzer versions are reachable at all.
+The generator's pubspec declares its Dart and analyzer ranges. Flutter 3.44.x
+pins `meta` at 1.18.0 and can resolve analyzer 13.0.0. Inspect the actual
+Flutter release and the solver output when diagnosing a different graph. A
+consumer that uses only the runtime avoids the generator's dependencies.
 
-- Flutter 3.44.x pins `meta 1.18.0` -> analyzer 13.0.0 is the ceiling.
-- Older Flutter pins something below 1.18.0 -> analyzer 13 is unreachable, so
-  v4's generator cannot be resolved at all.
+## Applying the migration
 
-This is why v4's floor is `13.0.0` and not `13.3.0`: a `13.3.0` floor would
-lock out current Flutter stable.
+`scripts/migrate_to_v4.sh` is the same executable as `tool/migrate_to_v4.sh`.
+It uses Ruby's standard YAML parser to preview edits and applies them with
+`--write`. It finds the runtime under a package's direct dependencies before
+editing the manifest or sibling `build.yaml`.
 
-Diagnosing a failed solve: the message names the pinned package, e.g.
-"every version of flutter from sdk depends on meta 1.18.0 and analyzer
->=13.1.0 depends on meta ^1.18.3". That is an SDK-version problem. The fix is
-upgrading Flutter or staying on router_builder 3.x - never a
-`dependency_overrides` entry, which produces a graph the packages never
-declared support for.
+- Ordinary v3 exact, caret and bounded hosted constraints become `^4.0.0`.
+  An existing v4 constraint is retained. The script adds the generator as a
+  dev dependency when absent.
+- It rewrites the old fully qualified builder key in targets, global options,
+  `applies_builders` and `runs_before`, plus explicit builder import URIs.
+- Review custom sources, constraints and overrides manually. A published
+  builder that exposes the generator from `lib/` needs a normal dependency.
+- After `flutter pub get`, `dart fix --dry-run` and `dart fix --apply`
+  migrate old Dart builder imports and exports, including prefixed and
+  `show` directives. You can also replace the URI by hand. The runtime
+  barrel stays at `package:router_builder/router_builder.dart`.
 
-## What the codemod does and does not touch
-
-`scripts/migrate_to_v4.sh` (byte-identical to `tool/migrate_to_v4.sh` in the
-package repo) is dry-run by default and idempotent.
-
-Rewrites:
-
-- hosted `router_builder:` constraint in any `pubspec.yaml` -> `^4.0.0`
-- inserts `router_builder_generator: ^4.0.0` into `dev_dependencies`, creating
-  the block if absent
-- `router_builder:generate_route_info_helper` ->
-  `router_builder_generator:generate_route_info_helper` in any `build.yaml`
-
-Leaves alone:
-
-- a `path:`/`git:` `router_builder` dependency, because rewriting the
-  constraint line would orphan the source lines beneath it
-- all Dart sources - v4 changes no runtime API
-- dependency ordering; the new entry is inserted first in the block, which
-  trips `sort_pub_dependencies` if that lint is enabled
-
-## Expected post-migration diffs
-
-- `routes.g.dart`: **formatting only**. v4 resolves `dart_style` 3.1.9+, which
-  wraps chained calls differently from 3.1.8. Route data must be identical; a
-  content change means something else went wrong.
-- `pubspec.lock`: for an app that does not regenerate, `analyzer`, `build`,
-  and `dart_style` disappear from the graph entirely.
+Run `dart run build_runner build` and review the generated routes. An updated
+formatter can produce different line wraps.

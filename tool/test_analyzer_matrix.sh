@@ -1,47 +1,54 @@
 #!/usr/bin/env bash
-#
-# Runs the generator suite against BOTH ends of its declared `analyzer` range.
-#
-# The whole point of router_builder_generator being a pure Dart package is that
-# it can resolve analyzer versions a Flutter package cannot (Flutter pins `meta`
-# exactly, which caps analyzer below 13.1.0). This script proves the declared
-# range is real rather than aspirational — run it before widening that range.
-#
-# Usage: tool/test_analyzer_matrix.sh
+# Run the generator with the lowest and newest compatible dependency sets.
+# Usage: tool/test_analyzer_matrix.sh [floor|latest]
 set -euo pipefail
 
-RANGE='>=13.0.0 <15.0.0'
-FLOOR='13.0.0'
+case "${1:-all}" in
+  floor|latest|all) lane=${1:-all} ;;
+  *) echo "Usage: $0 [floor|latest]" >&2; exit 2 ;;
+esac
 
-cd "$(dirname "$0")/../generator"
+generator_dir=$(cd "$(dirname "$0")/../generator" && pwd)
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/router-builder-generator.XXXXXXXX")
+trap 'rm -rf "$scratch"' EXIT
+rsync -a --exclude='.dart_tool/' --exclude='build/' --exclude='coverage/' \
+  --exclude='pubspec.lock' --exclude='pubspec_overrides.yaml' \
+  "$generator_dir/" "$scratch/"
+cd "$scratch"
 
-restore() {
-  dart pub add "analyzer:$RANGE" >/dev/null 2>&1 || true
-  dart pub upgrade >/dev/null 2>&1 || true
-  # `pub add` rewrites the constraint with double quotes; keep the file's style.
-  perl -pi -e "s/^  analyzer: \".*\"\$/  analyzer: '\$ENV{RANGE}'/" pubspec.yaml
+resolved_version() {
+  awk -v package="$1" '
+    $0 == "  " package ":" { found = 1 }
+    found && $1 == "version:" { gsub(/"/, "", $2); print $2; exit }
+  ' pubspec.lock
 }
-export RANGE
-trap restore EXIT
 
-resolved() {
-  awk '/^  [a-z_]+:$/{pkg=$1} /^    version:/{gsub(/"/,"",$2); print pkg, $2}' \
-    pubspec.lock | grep -E "^(analyzer|build|dart_style):" | tr '\n' ' '
+check_version() {
+  local package=$1 expected=$2 actual
+  actual=$(resolved_version "$package")
+  if [[ $actual != "$expected" && $actual != "$expected".* ]]; then
+    echo "Expected $package $expected, resolved $actual" >&2
+    exit 1
+  fi
+  echo "$package $actual"
 }
 
-echo "==> Ceiling: analyzer $RANGE (newest resolvable)"
-dart pub add "analyzer:$RANGE" >/dev/null
-dart pub upgrade >/dev/null
-echo "    resolved: $(resolved)"
-dart analyze
-dart test
+if [[ $lane != latest ]]; then
+  echo 'Testing the lowest supported versions'
+  dart pub downgrade --no-example
+  check_version analyzer 13.0.0
+  check_version build 4.0.6
+  dart analyze --fatal-infos
+  # The downgraded test compiler client expects a retired SDK snapshot.
+  # Run the same suites directly on the VM with the supported source compiler.
+  dart test --compiler=source
+fi
 
-echo
-echo "==> Floor: analyzer $FLOOR"
-dart pub add "analyzer:$FLOOR" >/dev/null
-echo "    resolved: $(resolved)"
-dart analyze
-dart test
-
-echo
-echo "==> Both ends of 'analyzer $RANGE' pass."
+if [[ $lane != floor ]]; then
+  echo 'Testing the newest compatible versions'
+  dart pub upgrade --no-example
+  check_version analyzer 14
+  check_version build 5
+  dart analyze --fatal-infos
+  dart test
+fi

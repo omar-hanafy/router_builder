@@ -29,8 +29,8 @@ options, error catalog, and the troubleshooting sequence are in
    project is on 3.x or earlier, where the generator's deps were regular
    `dependencies` and capped the app's build chain; the structural fix is the
    4.x upgrade (`migrate-v3-to-v4`). In 4.x the constraint lives in
-   `router_builder_generator` (`analyzer >=13.0.0 <15.0.0`), and a conflict
-   naming `meta` means Flutter is older than 3.44. Use `dependency_overrides`
+   `router_builder_generator` (`analyzer >=13.0.0 <15.0.0`), so inspect the consuming
+   Flutter SDK's `meta` constraint when the solver reports a conflict. Use `dependency_overrides`
    only as a diagnostic, never a committed fix. If the project is still on
    router_builder 2.x, 2.0.3/2.0.4 exist specifically to relax these ranges.
 4. Customization requests (rename generated classes, move the output, keep
@@ -42,6 +42,5 @@ options, error catalog, and the troubleshooting sequence are in
 
 ## Maintainer note (the package repo itself)
 
-Inside the router_builder REPO, model tests run with `flutter test` while
-generator tests are tagged and need `dart test --run-skipped test/generator/`;
-"generator tests are skipped" there is configuration, not a bug.
+Run runtime model tests with `flutter test` at the repository root. Run
+generator tests with `dart test` inside `generator/`.

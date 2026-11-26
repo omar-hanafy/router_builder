@@ -1,15 +1,14 @@
 # router_builder_generator
 
-Build-time code generator for [`router_builder`](https://pub.dev/packages/router_builder).
-
-It scans your `lib/` for `@RT`-annotated `RouteInfo` declarations and a single
-`@RTConfig` policy, then emits `lib/routes.g.dart` with typed route constants,
-branch maps, category getters, and a deep-link table.
+Generates typed route constants, branch lookups and deep-link helpers from
+`@RT()` declarations in a Flutter app. The generator runs on the Dart VM
+during development. Your app uses the generated Dart file at runtime.
 
 ## Install
 
-This package is build-time only. Put it in `dev_dependencies` — never in
-`dependencies`.
+Use the generator with `router_builder` 4.x. Version 3.x of the runtime
+includes its own builder. Regeneration requires Dart 3.11 or later and a
+Flutter dependency resolution that supports analyzer 13 or 14.
 
 ```yaml
 dependencies:
@@ -20,32 +19,24 @@ dev_dependencies:
   router_builder_generator: ^4.0.0
 ```
 
-Then:
+Run these commands from the app directory.
 
-```bash
+```sh
+flutter pub get
 dart run build_runner build
 ```
 
-## Why it is a separate package
+The builder scans the app's `lib/` for annotated top-level declarations and
+public static fields. It writes `lib/routes.g.dart` and uses an optional
+`@RTConfig()` policy for `RoutesHelper.installDefaults()`. The generator has
+its own Dart dependencies. An app that ships generated routes can depend
+solely on the runtime for routing.
 
-Up to `router_builder` 3.x the generator lived in the runtime package, which
-meant `analyzer`, `build`, and `dart_style` were declared as regular
-`dependencies`. Pub had to resolve them for every consuming app even though no
-app code imported them — so `router_builder`'s `analyzer` upper bound capped
-what those apps could upgrade `build_runner`, `build`, and `dart_style` to, and
-passed that cap on transitively to anything depending on them.
-
-Splitting the generator out puts it behind a `dev_dependency`, and
-`dev_dependencies` are not transitive. The runtime package now depends only on
-`flutter`, `dart_helper_utils`, and `equatable`.
-
-This package is deliberately **pure Dart**. Flutter pins `meta` to an exact
-version, which caps `analyzer` below 13.1.0; staying Flutter-free is what lets
-the generator resolve, and be tested against, the newest analyzer.
+[Example with a route, generated lookup and deep-link match](example/README.md)
 
 ## Configuration
 
-Options go in your app's `build.yaml`:
+Set options in the consuming app's `build.yaml`. These are the defaults.
 
 ```yaml
 targets:
@@ -53,15 +44,28 @@ targets:
     builders:
       router_builder_generator:generate_route_info_helper:
         options:
-          route_class_name: Routes        # generated route-constants class
-          helper_class_name: RoutesHelper # generated helper class
-          output: lib/routes.g.dart       # output path
-          fail_on_conflict: true          # fail the build on deep-link key clashes
+          route_class_name: Routes
+          helper_class_name: RoutesHelper
+          output: lib/routes.g.dart
+          fail_on_conflict: true
 ```
 
-## Documentation
+With `fail_on_conflict: true`, the build fails when routes share a name,
+first path segment or deep-link alias. With `false`, the builder logs a
+warning and keeps the first entry for the conflicting key.
 
-Route definition, policies, and deep linking are documented in the
-[`router_builder` README](https://github.com/omar-hanafy/router_builder#readme).
-Upgrading from 3.x is covered in the
-[migration guide](https://github.com/omar-hanafy/router_builder/blob/main/MIGRATION_GUIDE.md#v3---v4).
+## Upgrading from the bundled 3.x builder
+
+1. Move to `router_builder` 4.x and add the dev dependencies above.
+2. In custom build configuration, replace
+   `router_builder:generate_route_info_helper` with
+   `router_builder_generator:generate_route_info_helper`.
+3. For a direct builder import or export, use
+   `package:router_builder_generator/builder.dart`. After resolving the
+   paired 4.x packages, run `dart fix --dry-run` to preview Dart directive
+   migrations and `dart fix --apply` to apply them. Update builder import
+   strings in YAML manually.
+4. Regenerate the routes and run your app's analyzer and tests.
+
+Application annotations and models keep their
+`package:router_builder/router_builder.dart` import.

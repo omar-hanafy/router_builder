@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:router_builder/router_builder.dart';
 
 /// Shell tabs for bottom navigation (exercises branch routes + enum grouping).

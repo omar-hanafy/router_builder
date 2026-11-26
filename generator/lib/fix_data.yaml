@@ -1,0 +1,8 @@
+version: 1
+transforms:
+  - title: 'Import the standalone router_builder_generator builder'
+    date: 2026-11-26
+    library: 'package:router_builder/builder.dart'
+    changes:
+      - kind: 'replacedBy'
+        newLibrary: 'package:router_builder_generator/builder.dart'

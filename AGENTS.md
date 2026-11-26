@@ -1,6 +1,6 @@
 # router_builder - maintainer guide for coding agents
 
-**Two published packages in one repo**, released in lockstep (same version):
+**Two packages in one repository** share a version and publish separately.
 
 - `router_builder` (repo root) - the Flutter runtime. Barrel at
   `lib/router_builder.dart`. Depends ONLY on `flutter`, `dart_helper_utils`,
@@ -11,24 +11,26 @@
 Consumers get typed routes + deep-link matching from `@RT()` annotations,
 putting the runtime in `dependencies` and the generator in `dev_dependencies`.
 
-Each package has its own independent resolution and lockfile. This is
-deliberate and is NOT a Pub workspace: workspace members share one resolution,
-which would drag Flutter's exact `meta` pin into the generator and cap
-`analyzer` below 13.1.0 - defeating the entire point of the split.
+Keep independent resolutions and lockfiles. Putting these packages in a Pub
+workspace would constrain the generator's analyzer matrix to dependencies
+compatible with the installed Flutter SDK.
 
 ## Validation commands (run before claiming any change done)
 
 ```bash
 flutter test                                 # runtime tests (repo root)
 dart analyze                                 # public_member_api_docs is an ERROR here
-dart format .
+dart format --output=none --set-exit-if-changed .
 (cd generator && dart analyze && dart test)  # generator tests (plain dart test; pure Dart package)
 tool/test_analyzer_matrix.sh                 # generator at BOTH ends of its analyzer range
 dart tool/validate_plugin.dart               # AI plugin tree: versions, paths, parity
 ```
 
-For releases add `dart pub publish --dry-run` in **both** package roots and
-inspect each file list.
+For releases run `dart pub publish --dry-run` in `generator/` and
+`tool/stage_runtime_archive.sh HEAD /tmp/router_builder.tar.gz` for the
+runtime, choosing a new archive path. The helper validates the release
+revision without nesting the generator and resolves the archived example.
+Inspect both file lists. Publish the runtime from that verified archive.
 
 ## Boundaries
 
@@ -40,9 +42,8 @@ inspect each file list.
   resolve them for every consumer, capping the app's build chain and leaking
   that cap transitively to anything depending on router_builder. CI asserts
   their absence from `pubspec.lock`.
-- **Never give `generator/` a `flutter` dependency**, including dev. Flutter
-  pins `meta` exactly, which caps `analyzer` below 13.1.0 and would make the
-  declared range untestable. Generator tests use stubbed package sources
+- **Keep `generator/` free of Flutter dependencies**, including dev. The Dart
+  generator must be able to resolve its full declared range independently. Generator tests use stubbed package sources
   (`generator/test/_support.dart`) instead of real Flutter; real-Flutter
   coverage lives in `example/`.
 - Public API is ONLY what the two entrypoints export: `lib/router_builder.dart`
@@ -102,26 +103,20 @@ The rule for widening still holds, and is now actually testable:
   evidence. The v3.1.0 tree carried an untested `analyzer <15.0.0` bound whose
   generator could not compile against analyzer 13 at all; that is the failure
   this rule exists to prevent.
-- Raising the FLOOR is the breaking part, because `analyzer >=13.1.0` needs
-  `meta ^1.18.3` and the Flutter SDK pins `meta` exactly. Check which Flutter
-  release ships the required `meta` before raising it, and treat the resulting
-  Flutter floor as a documented breaking change. v4's floor is 13.0.0 (not
-  13.3.0) precisely so Flutter 3.44 stable still resolves it.
+- Before raising a lower bound, resolve a real consuming Flutter app with the
+  new dependency graph. Document any increase in the minimum supported Dart
+  or Flutter version. Flutter 3.44 pinned `meta` to 1.18.0 and relies on the
+  generator's analyzer 13.0.0 floor.
 
 ## Releasing
 
-Branch `main`, tags `vX.Y.Z` (annotated), CHANGELOG entry first (one per
-package), then: full validation commands above, dry-run inspection,
-`git tag vX.Y.Z && git push origin main vX.Y.Z`, then publish.
+Keep the generator and runtime changelogs aligned with their manifests.
+Publish the generator first. Before publishing the runtime, resolve the
+example from the staged runtime archive against the matching hosted generator.
+The local `example/pubspec_overrides.yaml` is for developing both packages
+together.
 
-**Publish `router_builder_generator` first, `router_builder` second.**
-`example/pubspec.yaml` depends on the generator by hosted version so the
-example still resolves inside the published router_builder archive; if the
-generator is not on pub.dev yet, pana cannot analyze that example. Local
-development uses `example/pubspec_overrides.yaml`, which `.pubignore` keeps
-out of the archive.
-
-`.pubignore` also excludes `generator/` from the router_builder archive - the
-two packages must never ship nested inside one another.
-
-Never reuse or move a published tag.
+Use annotated `vX.Y.Z` tags for the runtime and
+`router_builder_generator-vX.Y.Z` tags for the generator. Tag the reviewed
+merge on `main` and keep every release tag immutable. A generator release
+does not authorize a runtime tag or upload.

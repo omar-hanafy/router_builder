@@ -1,14 +1,15 @@
 name: router_builder_example
-description: Example app demonstrating router_builder v3.
+description: Flutter example for typed routes and deep links with router_builder.
 publish_to: none
 version: 1.0.0
 
 environment:
-  sdk: ^3.7.0
+  sdk: ^3.12.0
 
 dependencies:
   flutter:
     sdk: flutter
+  material_ui: ^1.0.0
   router_builder:
     path: ../
 
@@ -17,10 +18,11 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
-  # Build-time only. Keeping the generator out of `dependencies` is what keeps
-  # analyzer/build/dart_style out of an app's production dependency graph.
-  #
-  # Declared as a hosted version so this example still resolves inside the
-  # published router_builder archive (which does not carry ../generator).
-  # Local development uses the sibling package via pubspec_overrides.yaml.
-  router_builder_generator: ^4.0.0
+  # Use the public split revision until the first hosted generator is available.
+  # Local development resolves the sibling package via pubspec_overrides.yaml.
+  router_builder_generator:
+    version: ^4.0.0
+    git:
+      url: https://github.com/omar-hanafy/router_builder
+      ref: 70751510b4413966c3343ec691264fd848680a25
+      path: generator

@@ -1,6 +1,6 @@
 /// Public entry point for router_builder: annotations, models, config, the
 /// deep-link layer, and handlers. Import this library to define routes and use
-/// the generated helper. The code generator lives in `builder.dart`.
+/// the generated helper. Custom builders can import `package:router_builder_generator/builder.dart`.
 library;
 
 export 'src/annotations/route.dart';

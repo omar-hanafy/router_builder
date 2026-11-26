@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:dart_helper_utils/dart_helper_utils.dart';
 import 'package:equatable/equatable.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:router_builder/src/handlers/deep_link_handler.dart';
 import 'package:router_builder/src/models/duplicate_route_behavior.dart';
 import 'package:router_builder/src/models/route_args.dart';

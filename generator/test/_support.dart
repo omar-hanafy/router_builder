@@ -37,10 +37,8 @@ const String defaultOutput = '$rootPackage|lib/routes.g.dart';
 ///
 /// The generator inspects only the resolved element model — constructor names,
 /// field names, and whether `branchParentType` is an enum — never Flutter's
-/// real behaviour. Stubs are therefore sufficient, and they are what keeps this
-/// package pure Dart: depending on real Flutter would drag the SDK's exact
-/// `meta` pin into this resolution and cap `analyzer` below 13.1.0, which is
-/// precisely the blocking this package exists to avoid.
+/// runtime behavior. These stubs let the generator tests select analyzer
+/// versions independently of the Flutter SDK.
 ///
 /// Real-Flutter coverage lives in `example/`, which builds against the actual
 /// runtime package.

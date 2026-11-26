@@ -1,0 +1,4 @@
+# The external migration test analyzes these fixtures against both package graphs.
+linter:
+  rules:
+    - deprecated_member_use_from_same_package

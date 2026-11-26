@@ -1,7 +1,7 @@
-# Generator reference (router_builder v3)
+# Generator reference
 
-Verified against `lib/src/generators/generate_route_info_helper.dart` and the
-package `build.yaml` at v3.0.x.
+The v4 builder is defined in `generator/build.yaml` and implemented in
+`generator/lib/src/generate_route_info_helper.dart`.
 
 ## What the builder is
 
@@ -46,9 +46,9 @@ Override in the CONSUMER app's `build.yaml`:
 targets:
   $default:
     builders:
-      router_builder|generate_route_info_helper:
+      router_builder_generator:generate_route_info_helper:
         options:
-          output: lib/routes.g.dart          # also update build_extensions if you fully redefine the builder
+          output: lib/routes.g.dart
           route_class_name: Routes
           helper_class_name: RoutesHelper
           fail_on_conflict: true
@@ -123,8 +123,8 @@ runtime) cannot be extracted; keep `RouteInfo` names as literals.
    app's build chain — the structural fix is the 4.x upgrade
    (`migrate-v3-to-v4`), which moves them behind a `dev_dependency`. In 4.x
    the constraint lives in `router_builder_generator`
-   (`analyzer >=13.0.0 <15.0.0`), and a failure naming `meta` means the
-   Flutter SDK is older than 3.44. Otherwise find the package pinning an
+   (`analyzer >=13.0.0 <15.0.0`). For a conflict involving `meta`, identify
+   the Flutter SDK constraint and the other package pinning an
    incompatible range (`dart pub deps` or read the solver output), upgrade it,
    and only use `dependency_overrides` as a last-resort diagnostic, never a
    shipped fix.
@@ -134,9 +134,6 @@ runtime) cannot be extracted; keep `RouteInfo` names as literals.
 
 ## Package-repo test note (maintainers)
 
-Generator tests in THIS repo are tagged `generator` and skipped under
-`flutter test` (build_test needs the Dart VM runner). Run them with:
-
-```bash
-dart test --run-skipped test/generator/
-```
+Run `dart test` in `generator/` and `flutter test` in the runtime root.
+`tool/verify_generation.sh` builds the Flutter example from source and tests
+the generated helpers.

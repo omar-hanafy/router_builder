@@ -20,12 +20,13 @@ This guide collects everything you need to move between major versions of
 
 ## v3 -> v4
 
-v4 makes one change: **the code generator moved into its own package,
-`router_builder_generator`.**
+The v4 runtime and the code generator ship in separate packages. The generator
+is now `router_builder_generator`.
 
-Your Dart code does not change. No runtime API was touched, no annotation was
-renamed, and the import stays `package:router_builder/router_builder.dart`.
-This is a pubspec migration.
+Route declarations and application imports of `package:router_builder/router_builder.dart`
+work as before. Custom builders that import or export the old Dart builder
+library must update that URI. Start the hosted upgrade once both packages are
+available at 4.0.0.
 
 ### Why
 
@@ -43,26 +44,13 @@ it did not stop pub's solver from having to *resolve* them. Two consequences:
 
 In v4 the runtime package depends only on `flutter`, `dart_helper_utils`, and
 `equatable`. The generator is a build-time `dev_dependency`, and
-`dev_dependencies` are not transitive, so `router_builder` can no longer hold
-anybody's dependency graph back.
+`dev_dependencies` apply only within the consuming project. A package that
+uses the runtime no longer passes the generator's constraints on to its users.
 
-### What changed
+### Updating dependencies
 
-- **New package `router_builder_generator`** holds the builder. Add it to
-  `dev_dependencies`; never to `dependencies`.
-- **`package:router_builder/builder.dart` moved** to
-  `package:router_builder_generator/builder.dart`. You only reference this if
-  you wrote a custom `build.yaml`.
-- **The builder key changed** from
-  `router_builder:generate_route_info_helper` to
-  `router_builder_generator:generate_route_info_helper`. Again, only relevant
-  with a custom `build.yaml`.
-- **`analyzer` support moved to `>=13.0.0 <15.0.0`** (was `>=9.0.0 <13.0.0`),
-  and `source_gen` was dropped - it was declared but never used.
-- **No runtime API changes.** `RouteInfo`, `RoutePolicy`, `RouteArgs`, `@RT`,
-  `@RTConfig`, the deep-link layer, and the generated output are all unchanged.
-
-### Step 0: bump the dependency
+Applications that regenerate routes need these two constraints. Applications
+that ship an existing generated file can update the runtime alone.
 
 ```yaml
 dependencies:
@@ -72,62 +60,73 @@ dev_dependencies:
   router_builder_generator: ^4.0.0
 ```
 
-Then `flutter pub get`.
+Keep your existing `build_runner` dependency. If your own package's published
+builder imports or re-exports the generator from `lib/`, declare
+`router_builder_generator` in that package's regular `dependencies` so its
+consumers can resolve the builder.
 
-### Step 1: run the automated codemod
+### Applying the YAML changes
+
+For a project that regenerates routes, run the bundled script from the app
+directory. It requires Ruby with its standard YAML library.
 
 ```bash
-tool/migrate_to_v4.sh            # dry run: prints the diff, changes nothing
-tool/migrate_to_v4.sh --write    # apply
+script=/path/to/router_builder/tool/migrate_to_v4.sh
+"$script"
+"$script" --write
 ```
 
-It rewrites exactly three things, and is idempotent:
+The first command previews a diff. The second updates hosted, single-line v3
+constraints and adds the generator to `dev_dependencies`. It also updates
+standard builder configuration in that package's `build.yaml`, including
+target and global options, explicit builder imports, and builder ordering
+and application lists. Existing comments and quotes are preserved.
 
-- the hosted `router_builder:` constraint in every `pubspec.yaml` -> `^4.0.0`
-- adds `router_builder_generator: ^4.0.0` to `dev_dependencies`
-- renames the builder key in any `build.yaml`
+Review any package the script marks for manual editing. Keep intentional
+path, Git and override sources and point them at compatible v4 checkouts
+yourself. For custom constraints or inline dependency maps, edit the two
+dependencies directly. Packages using the builder only through a wrapper
+should also check its settings. The builder key is now
+`router_builder_generator:generate_route_info_helper` and the builder import
+in YAML is `package:router_builder_generator/builder.dart`.
 
-A `path:`/`git:` `router_builder` dependency is left alone on purpose - that
-override is yours to manage.
+### Migrating Dart imports and exports
 
-### Step 2: manual changes
+Run `flutter pub get` after updating the manifest. If your tooling imports or
+re-exports `package:router_builder/builder.dart`, preview and apply the Dart
+URI migration from the consuming package.
 
-None for application code. The one case needing a look is a **custom
-`build.yaml`** that referenced the builder by its old package name; the codemod
-handles the standard form, but if you wrapped the builder in a custom target or
-`global_options` block, confirm the key now reads
-`router_builder_generator:generate_route_info_helper`.
+```bash
+dart fix --dry-run
+dart fix --apply
+```
 
-If you publish a package that depends on `router_builder` and re-exports route
-definitions, move `router_builder_generator` into your package's
-`dev_dependencies` too. Leaving it in `dependencies` would reintroduce exactly
-the transitive constraint v4 removes.
+The old runtime library contains a deprecation marker. The generator supplies
+the fix that points an import or export at
+`package:router_builder_generator/builder.dart`. The builder factory
+`generateRouteInfoHelperBuilder` and exception `RouterBuilderError` retain
+their names. The fix was verified with Dart 3.14.0 on ordinary, prefixed and
+`show` imports and a re-export. You can also replace the old URI directly.
+Route annotations and models still come from
+`package:router_builder/router_builder.dart`.
 
-### Step 3: regenerate
+### Regenerating and verifying
 
 ```bash
 dart run build_runner build
-```
-
-Expect a small formatting-only diff in `routes.g.dart`: v4 resolves
-`dart_style` 3.1.9+, which breaks chained calls slightly differently from
-3.1.8. The generated route data is unchanged.
-
-### Step 4: verify
-
-```bash
 flutter analyze
 flutter test
 ```
 
-### Minimum Flutter version
+Review the regenerated `lib/routes.g.dart` with the dependency and import
+changes. The resolved `dart_style` version may change line breaks.
 
-`analyzer >=13.0.0` needs `meta ^1.18.0`, which means a Flutter SDK that ships
-`meta 1.18.0` or newer (Flutter 3.44 and later). On an older SDK the solver
-cannot reach `analyzer 13`, so stay on `router_builder` 3.x until you upgrade
-Flutter. Only the generator has this floor - if you vendor a generated
-`routes.g.dart` and drop `router_builder_generator`, the runtime package alone
-has no such constraint.
+### SDK compatibility
+
+Check the generator's Dart SDK constraint and the analyzer range supported by
+your Flutter SDK. For example, Flutter 3.44's `meta` pin allows analyzer
+13.0.0. Applications that use only the v4 runtime do not resolve the generator
+or its analyzer dependency.
 
 ### Quick reference (v3 -> v4)
 
