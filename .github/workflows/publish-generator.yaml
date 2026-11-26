@@ -1,0 +1,56 @@
+name: Publish router_builder_generator
+
+on:
+  push:
+    tags:
+      - 'router_builder_generator-v*'
+
+permissions: {}
+
+jobs:
+  check-tag:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check the package version and release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          grep -Fx 'name: router_builder_generator' generator/pubspec.yaml
+          version=$(sed -n 's/^version: //p' generator/pubspec.yaml)
+          test -n "$version"
+          test "$GITHUB_REF_NAME" = "router_builder_generator-v$version"
+          test "$(git cat-file -t "$GITHUB_REF")" = tag
+          commit=$(git rev-parse "$GITHUB_REF^{commit}")
+          test "$commit" = "$(git rev-parse HEAD)"
+          git rev-list --first-parent origin/main | grep -Fx "$commit"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$commit/pulls" \
+            --jq '.[] | select(.base.ref == "main" and .merged_at != null) | .merge_commit_sha' |
+            grep -Fx "$commit"
+      - name: Verify the manually published first version
+        if: github.ref_name == 'router_builder_generator-v4.0.0'
+        run: |
+          curl --fail --silent --show-error --retry 3 \
+            https://pub.dev/api/packages/router_builder_generator/versions/4.0.0 |
+            jq -e '.pubspec.name == "router_builder_generator" and .version == "4.0.0"'
+
+  publish:
+    needs: check-tag
+    permissions:
+      contents: read
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@2286a0c042b44434fe26d292bbce8d34f7ec662b # v1.8.2
+    with:
+      working-directory: generator
+      use-flutter: false
+      # pub.dev requires the first upload from a signed-in uploader.
+      test-run: ${{ github.ref_name == 'router_builder_generator-v4.0.0' }}
