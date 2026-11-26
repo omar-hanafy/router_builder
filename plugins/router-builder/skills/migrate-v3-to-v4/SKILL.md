@@ -37,8 +37,8 @@ bash /path/to/migrate_to_v4.sh --write  # apply after reviewing the diff
 ```
 
 The script uses Ruby's standard YAML library. It updates hosted v3 runtime
-constraints, adds the generator to `dev_dependencies` and updates recognized
-builder keys and import URIs in that package's `build.yaml`. Review its
+constraints, adds the generator for packages that declare `build_runner`,
+and updates recognized builder keys and import URIs in that package's `build.yaml`. Review its
 manual-edit messages for custom constraints, nonstandard YAML, path or Git
 sources, and dependency overrides.
 
@@ -46,16 +46,18 @@ sources, and dependency overrides.
 
 ```bash
 flutter pub get
-dart fix --dry-run
-dart fix --apply
+dart run router_builder_generator:migrate_builder_imports
+dart run router_builder_generator:migrate_builder_imports --write
 ```
 
-The data-driven fix changes Dart imports and exports of
-`package:router_builder/builder.dart` to
-`package:router_builder_generator/builder.dart`. The factory
-`generateRouteInfoHelperBuilder` and exception `RouterBuilderError` keep
-their names. A direct URI replacement is equivalent. Imports of the runtime
-barrel stay as they are.
+The first migration command previews file locations. The second changes Dart
+imports and exports of `package:router_builder/builder.dart` to
+`package:router_builder_generator/builder.dart`, including conditional URIs.
+Prefixes, import combinators and comments stay in place. The separate
+`dart fix` element transforms cover unprefixed uses. They can leave a prefixed
+factory reference or re-export unresolved, so use the directive migration first.
+The factory `generateRouteInfoHelperBuilder` and exception `RouterBuilderError`
+retain their names. Application imports of the runtime barrel stay as they are.
 
 ## Step 3: Review custom wiring and regenerate
 

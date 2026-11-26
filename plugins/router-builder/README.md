@@ -41,7 +41,7 @@ uninstall/remove command.
 | `debug-generation` | routes.g.dart missing/stale; RouterBuilderError; @RT discovery; analyzer/dependency conflicts; builder options |
 | `review-routes` | Auditing all route declarations for auth gaps, key collisions, policy misuse |
 | `upgrade-router-builder` | Choosing the upgrade path between majors; router_builder capping an analyzer/build_runner upgrade |
-| `migrate-v3-to-v4` | The breaking 3.x -> 4.x generator-package split (bundled codemod; pubspec-only, no Dart changes) |
+| `migrate-v3-to-v4` | The 3.x → 4.x generator split, including YAML and custom builder directives |
 | `migrate-v2-to-v3` | The breaking 2.x -> 3.x migration (bundled codemod + manual folds) |
 
 On both platforms skills are namespaced `router-builder:<skill>`: invoke
@@ -72,10 +72,10 @@ Example prompts:
   themselves.
 - The bundled executables are the migration codemods,
   `skills/migrate-v2-to-v3/scripts/migrate_to_v3.sh` and
-  `skills/migrate-v3-to-v4/scripts/migrate_to_v4.sh`: dry-run-by-default,
-  perl-based textual codemods (byte-identical copies of the `tool/` originals
-  in the package repo; CI-verified parity). Agents are instructed to show you
-  the dry-run diff before applying `--write`.
+  `skills/migrate-v3-to-v4/scripts/migrate_to_v4.sh`. Both preview a diff
+  by default and apply edits with `--write`. The v2 script uses Perl.
+  The v3 script uses Ruby and its standard YAML library. CI checks that
+  both copies match the originals in `tool/`.
 - No hooks, no MCP servers, no network access, no telemetry.
 - The `route-auditor` agent is restricted to read-only tools.
 

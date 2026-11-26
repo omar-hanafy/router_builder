@@ -19,6 +19,18 @@ dev_dependencies:
   router_builder_generator: ^4.0.0
 ```
 
+If pub.dev still lists version 3.x as the latest runtime, use the paired
+runtime revision below in place of the hosted `router_builder` dependency.
+Keep the generator in `dev_dependencies`.
+
+```yaml
+dependencies:
+  router_builder:
+    git:
+      url: https://github.com/omar-hanafy/router_builder
+      ref: 1f0b3d1dbd923d8f91b27be39ccbfb60530da74f
+```
+
 Run these commands from the app directory.
 
 ```sh
@@ -60,11 +72,11 @@ warning and keeps the first entry for the conflicting key.
 2. In custom build configuration, replace
    `router_builder:generate_route_info_helper` with
    `router_builder_generator:generate_route_info_helper`.
-3. For a direct builder import or export, use
-   `package:router_builder_generator/builder.dart`. After resolving the
-   paired 4.x packages, run `dart fix --dry-run` to preview Dart directive
-   migrations and `dart fix --apply` to apply them. Update builder import
-   strings in YAML manually.
+3. After resolving both packages, preview direct builder imports and exports
+   with `dart run router_builder_generator:migrate_builder_imports`.
+   Repeat with `--write` to update the URI, including conditional alternatives.
+   Packages that expose the builder from `lib/` declare the generator in
+   regular dependencies. The migration guide covers YAML and workspace cases.
 4. Regenerate the routes and run your app's analyzer and tests.
 
 Application annotations and models keep their

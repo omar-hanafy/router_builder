@@ -100,9 +100,7 @@ The rule for widening still holds, and is now actually testable:
   major (`build`/`dart_style` must support it first) AND
   `tool/test_analyzer_matrix.sh` passes at both ends. Never widen
   speculatively - pana's "does not support latest analyzer" hint alone is not
-  evidence. The v3.1.0 tree carried an untested `analyzer <15.0.0` bound whose
-  generator could not compile against analyzer 13 at all; that is the failure
-  this rule exists to prevent.
+  evidence. Published v3.1.0 constrained analyzer to `>=9.0.0 <13.0.0`.
 - Before raising a lower bound, resolve a real consuming Flutter app with the
   new dependency graph. Document any increase in the minimum supported Dart
   or Flutter version. Flutter 3.44 pinned `meta` to 1.18.0 and relies on the
@@ -116,7 +114,7 @@ example from the staged runtime archive against the matching hosted generator.
 The local `example/pubspec_overrides.yaml` is for developing both packages
 together.
 
-Use annotated `vX.Y.Z` tags for the runtime and
+Use annotated `router_builder-vX.Y.Z` tags for the runtime and
 `router_builder_generator-vX.Y.Z` tags for the generator. Tag the reviewed
 merge on `main` and keep every release tag immutable. A generator release
 does not authorize a runtime tag or upload.

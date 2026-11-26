@@ -4,9 +4,9 @@
 /// `package:router_builder_generator/builder.dart`; the build_runner
 /// convention is for a package's builder factories to live here.
 ///
-/// This package is build-time only: add it to `dev_dependencies`, never to
-/// `dependencies`, so that `analyzer`, `build`, and `dart_style` stay out of an
-/// app's production dependency graph.
+/// Apps that run the builder add this package to `dev_dependencies`.
+/// A package that imports or re-exports the builder from its published
+/// `lib/` declares it in `dependencies` so downstream packages can resolve it.
 library;
 
 export 'router_builder_generator.dart';

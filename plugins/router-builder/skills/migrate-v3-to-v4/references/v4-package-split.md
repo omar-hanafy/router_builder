@@ -59,16 +59,20 @@ It uses Ruby's standard YAML parser to preview edits and applies them with
 editing the manifest or sibling `build.yaml`.
 
 - Ordinary v3 exact, caret and bounded hosted constraints become `^4.0.0`.
-  An existing v4 constraint is retained. The script adds the generator as a
-  dev dependency when absent.
+  An existing v4 constraint is retained. For packages that declare
+  `build_runner`, the script adds a missing generator as a dev dependency.
+  Runtime-only packages can upgrade independently.
 - It rewrites the old fully qualified builder key in targets, global options,
   `applies_builders` and `runs_before`, plus explicit builder import URIs.
 - Review custom sources, constraints and overrides manually. A published
   builder that exposes the generator from `lib/` needs a normal dependency.
-- After `flutter pub get`, `dart fix --dry-run` and `dart fix --apply`
-  migrate old Dart builder imports and exports, including prefixed and
-  `show` directives. You can also replace the URI by hand. The runtime
-  barrel stays at `package:router_builder/router_builder.dart`.
+- After `flutter pub get`, preview
+  `dart run router_builder_generator:migrate_builder_imports` and repeat with
+  `--write`. It updates complete directives, including prefixed, conditional
+  and `show` imports and re-exports. You can also replace the URI by hand.
+  `dart fix` independently supports unprefixed references and may leave other
+  forms incomplete. The runtime barrel stays at
+  `package:router_builder/router_builder.dart`.
 
 Run `dart run build_runner build` and review the generated routes. An updated
 formatter can produce different line wraps.

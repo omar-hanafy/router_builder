@@ -59,6 +59,9 @@ jobs:
         env:
           LANE: ${{ matrix.lane }}
         run: tool/test_analyzer_matrix.sh "$LANE"
+      - if: matrix.lane == 'floor'
+        name: Verify migrations on the minimum Dart SDK
+        run: python3 tool/test_v4_migration.py --standalone
       - if: matrix.lane == 'latest'
         working-directory: generator
         run: |
@@ -67,8 +70,12 @@ jobs:
           dart pub publish --dry-run
 
   example:
-    name: example (end-to-end build)
+    name: example (Flutter ${{ matrix.version || 'stable' }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['3.44.0', '']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -76,7 +83,9 @@ jobs:
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
+          flutter-version: ${{ matrix.version }}
       - name: Generate, compare and exercise routes
         run: tool/verify_generation.sh
       - name: Migrate a client of the published 3.x builder
+        if: matrix.version == ''
         run: python3 tool/test_v4_migration.py

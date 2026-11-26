@@ -77,37 +77,47 @@ script=/path/to/router_builder/tool/migrate_to_v4.sh
 ```
 
 The first command previews a diff. The second updates hosted, single-line v3
-constraints and adds the generator to `dev_dependencies`. It also updates
+constraints. It adds the generator to `dev_dependencies` for packages that
+declare `build_runner`. In a runtime-only package it updates the runtime
+constraint. The script also updates
 standard builder configuration in that package's `build.yaml`, including
 target and global options, explicit builder imports, and builder ordering
 and application lists. Existing comments and quotes are preserved.
 
-Review any package the script marks for manual editing. Keep intentional
+Review any package the script marks for manual editing. For a pub workspace,
+check the shared resolution and its overrides. For explicit YAML keys or
+indented dependency blocks, edit the constraints in their existing form.
+Keep intentional
 path, Git and override sources and point them at compatible v4 checkouts
 yourself. For custom constraints or inline dependency maps, edit the two
-dependencies directly. Packages using the builder only through a wrapper
-should also check its settings. The builder key is now
+dependencies directly. If another package supplies your build runner, choose
+the generator dependency explicitly and check the wrapper settings. The builder key is now
 `router_builder_generator:generate_route_info_helper` and the builder import
 in YAML is `package:router_builder_generator/builder.dart`.
 
 ### Migrating Dart imports and exports
 
-Run `flutter pub get` after updating the manifest. If your tooling imports or
-re-exports `package:router_builder/builder.dart`, preview and apply the Dart
-URI migration from the consuming package.
+Run `flutter pub get` after updating the manifest. For a custom Dart builder
+that imports or re-exports `package:router_builder/builder.dart`, preview the
+affected directive locations, then apply the update.
 
 ```bash
-dart fix --dry-run
-dart fix --apply
+dart run router_builder_generator:migrate_builder_imports
+dart run router_builder_generator:migrate_builder_imports --write
 ```
 
-The old runtime library contains a deprecation marker. The generator supplies
-the fix that points an import or export at
-`package:router_builder_generator/builder.dart`. The builder factory
-`generateRouteInfoHelperBuilder` and exception `RouterBuilderError` retain
-their names. The fix was verified with Dart 3.14.0 on ordinary, prefixed and
-`show` imports and a re-export. You can also replace the old URI directly.
-Route annotations and models still come from
+The command changes the URI to `package:router_builder_generator/builder.dart`,
+including alternatives in conditional imports and exports. It preserves prefixes,
+`show` and `hide` clauses, comments, and ordinary string literals. To limit the
+scope, pass one or more Dart source files or directories. Repeating the command
+after migration reports zero changes. You can also edit the old URI directly.
+
+The deprecated runtime library points developers to the generator, where
+`generateRouteInfoHelperBuilder` and `RouterBuilderError` keep their names.
+The generator also provides `dart fix` element fixes for unprefixed uses.
+Running `dart fix` alone can leave prefixed factory references or re-exports
+unresolved and can drop a `show` clause. Run the dedicated command first to
+retain the full directives. Route annotations and models still come from
 `package:router_builder/router_builder.dart`.
 
 ### Regenerating and verifying

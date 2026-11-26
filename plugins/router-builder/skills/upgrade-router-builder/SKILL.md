@@ -19,17 +19,17 @@ to its dedicated skill. Never guess the version from imports alone.
   the generator still inside `router_builder` mean 3.x;
   `MyRoutes`/`RouteInfoHelper`/`route_info_helper.dart` or flat params
   (`isGlobalOnly:`, `isIdSlug:`) mean 1.x/2.x.
-- **Check `flutter --version` before targeting 4.x.** v4's generator needs
-  `analyzer >=13.0.0`, which needs `meta ^1.18.0`, which means Flutter 3.44 or
-  newer. On an older SDK, 4.x cannot be resolved at all - target latest 3.x
-  instead and say why.
+- Check the generator's Dart SDK and analyzer constraints for packages that
+  regenerate routes. For instance, Flutter 3.44's `meta` pin permits analyzer
+  13.0.0. A package that uses only the runtime or ships pregenerated routes
+  can upgrade the runtime independently of those build-tool constraints.
 
 ## Step 2: Route by path
 
 | From -> To | Path |
 |---|---|
 | 4.x -> newer 4.x | Bump constraint (both packages, they release in lockstep), `flutter pub get`, `dart run build_runner build`, `dart analyze`, run tests. |
-| 3.x -> 4.x | Use `migrate-v3-to-v4` for the generator dependency and build configuration. Migrate custom builder imports and exports with `dart fix`, then regenerate. |
+| 3.x -> 4.x | Use `migrate-v3-to-v4` for the generator dependency and build configuration. Migrate custom builder imports and exports with `dart run router_builder_generator:migrate_builder_imports --write` after its preview, then regenerate. |
 | 3.x -> newer 3.x | Bump constraint, `flutter pub get`, `dart run build_runner build`, `dart analyze`, run tests. 3.0.1 only relaxed the analyzer constraint; no code changes. |
 | 2.x -> 4.x | Two hops: `migrate-v2-to-v3`, then `migrate-v3-to-v4`. |
 | 2.x -> 3.x | BREAKING. Use the `migrate-v2-to-v3` skill (codemod + manual policy folds + regenerate + host audit). |

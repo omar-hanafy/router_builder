@@ -11,8 +11,9 @@
 - Custom generator integrations use
   `router_builder_generator:generate_route_info_helper` in build
   configuration and `package:router_builder_generator/builder.dart` in
-  builder imports. For Dart imports and exports, preview `dart fix` after
-  upgrading both packages. The generator requires Dart 3.11 or later and
+  builder imports. Preview direct Dart import and export migrations with
+  `dart run router_builder_generator:migrate_builder_imports` after upgrading
+  both packages. Add `--write` to apply them. The generator requires Dart 3.11 or later and
   supports analyzer 13.x and 14.x. [Migration guide](MIGRATION_GUIDE.md#v3---v4)
 
 ## 3.1.0

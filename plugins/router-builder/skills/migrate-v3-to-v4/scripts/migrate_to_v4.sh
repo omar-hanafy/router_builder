@@ -91,28 +91,43 @@ def migrate_pubspec(path, text)
   if runtime_deps.key?(RUNTIME) && dev_deps.key?(RUNTIME)
     raise ManualEdit, 'router_builder appears in both dependency sections'
   end
-  if overrides?(manifest)
-    raise ManualEdit, 'preserve the explicit dependency override'
-  end
   local = File.join(File.dirname(path), 'pubspec_overrides.yaml')
-  if File.file?(local) && overrides?(entries(document(File.read(local))))
-    raise ManualEdit, 'preserve the dependency in pubspec_overrides.yaml'
+  local_config = File.file?(local) ? entries(document(File.read(local))) : {}
+  if [manifest, local_config].any? { |config| config.key?('workspace') || config.key?('resolution') }
+    raise ManualEdit, 'review shared workspace dependencies and overrides across its members'
+  end
+  if overrides?(manifest) || overrides?(local_config)
+    raise ManualEdit, 'preserve the explicit dependency override'
   end
   if !constrained_version?(runtime.last, 3) && !constrained_version?(runtime.last, 4)
     raise ManualEdit, 'review the router_builder constraint or custom source'
   end
 
   edits = []
+  adding_generator = false
   edits << scalar_edit(runtime.last, VERSION) if constrained_version?(runtime.last, 3)
   generator = runtime_deps[GENERATOR] || dev_deps[GENERATOR]
   if generator
+    if runtime_deps.key?(GENERATOR) && dev_deps.key?(GENERATOR)
+      raise ManualEdit, 'the generator appears in both dependency sections'
+    end
     raise ManualEdit, 'review the existing generator constraint or custom source' unless constrained_version?(generator.last, 4)
+  elsif !runtime_deps.key?('build_runner') && !dev_deps.key?('build_runner')
+    # A runtime-only dependency works on SDKs that cannot resolve the generator.
+    if runtime_deps.key?('build') || dev_deps.key?('build') || File.file?(File.join(File.dirname(path), 'build.yaml'))
+      raise ManualEdit, 'choose the generator dependency for this custom build package'
+    end
   else
+    adding_generator = true
     section = manifest['dev_dependencies']
     dev_map = section&.last
     inline_dev_map = dev_map.is_a?(Psych::Nodes::Mapping) && dev_map.style == Psych::Nodes::Mapping::FLOW
     if root.style == Psych::Nodes::Mapping::FLOW || inline_dev_map
       raise ManualEdit, 'add the generator to the inline dependency mapping'
+    end
+    key = (section || manifest.fetch('dependencies')).first
+    unless key.start_column.zero? && key.start_line == key.end_line
+      raise ManualEdit, 'add the generator to the indented or explicit dependency section'
     end
     newline = text.include?("\r\n") ? "\r\n" : "\n"
     if section
@@ -126,34 +141,55 @@ def migrate_pubspec(path, text)
       edits << [line, 0, 0, "dev_dependencies:#{newline}  #{GENERATOR}: #{VERSION}#{newline}#{newline}"]
     end
   end
-  apply_edits(text, edits)
+  return text if edits.empty?
+  updated = apply_edits(text, edits)
+  # Compare the complete data before writing any text edits. An insertion can
+  # be valid YAML and still leave the generator in the wrong mapping.
+  expected = Psych.safe_load(text)
+  section = runtime_deps.key?(RUNTIME) ? 'dependencies' : 'dev_dependencies'
+  raise ManualEdit, 'review the dependency section' unless expected[section].is_a?(Hash)
+  expected[section][RUNTIME] = VERSION if constrained_version?(runtime.last, 3)
+  (expected['dev_dependencies'] ||= {})[GENERATOR] = VERSION if adding_generator
+  raise ManualEdit, 'review the location of the dependency edits' unless Psych.safe_load(updated) == expected
+  updated
+rescue Psych::BadAlias, Psych::DisallowedClass
+  raise ManualEdit, 'review the YAML aliases or custom value types'
 end
 
-def rename_builder(mapping, edits)
-  definitions = entries(mapping)
-  return unless definitions.key?(OLD_KEY)
-  raise ManualEdit, 'both builder names are already present' if definitions.key?(NEW_KEY)
-  edits << scalar_edit(definitions.fetch(OLD_KEY).first, NEW_KEY)
+def rename_builder_names(nodes, edits)
+  matches = nodes.select { |node| [OLD_KEY, NEW_KEY].include?(node.value.sub('|', ':')) }
+  old = matches.find { |node| node.value.sub('|', ':') == OLD_KEY }
+  return unless old
+  raise ManualEdit, 'multiple spellings of the builder are already present' if matches.size > 1
+  edits << scalar_edit(old, NEW_KEY)
+end
+
+def rename_builder_list(list, edits)
+  return unless list
+  unless list.is_a?(Psych::Nodes::Sequence) && list.children.all? { |node| node.is_a?(Psych::Nodes::Scalar) }
+    raise ManualEdit, 'review the builder name list or alias'
+  end
+  rename_builder_names(list.children, edits)
 end
 
 def migrate_build(text)
   config = entries(document(text))
   edits = []
-  rename_builder(config.dig('global_options', 1), edits)
+  globals = entries(config.dig('global_options', 1))
+  rename_builder_names(globals.values.map(&:first), edits)
+  rename_builder_names(entries(config.dig('triggers', 1)).values.map(&:first), edits)
+  globals.each_value { |_, options| rename_builder_list(entries(options).dig('runs_before', 1), edits) }
   entries(config.dig('targets', 1)).each_value do |_, target|
-    rename_builder(entries(target).dig('builders', 1), edits)
+    builders = entries(entries(target).dig('builders', 1))
+    rename_builder_names(builders.values.map(&:first), edits)
   end
   %w[builders post_process_builders].each do |kind|
     entries(config.dig(kind, 1)).each_value do |_, definition|
       fields = entries(definition)
       uri = fields.dig('import', 1)
       edits << scalar_edit(uri, NEW_URI) if uri.is_a?(Psych::Nodes::Scalar) && uri.value == OLD_URI
-      %w[applies_builders runs_before].each do |field|
-        list = fields.dig(field, 1)
-        next unless list.is_a?(Psych::Nodes::Sequence)
-        list.children.each do |entry|
-          edits << scalar_edit(entry, NEW_KEY) if entry.is_a?(Psych::Nodes::Scalar) && entry.value == OLD_KEY
-        end
+      if kind == 'builders'
+        %w[applies_builders runs_before].each { |field| rename_builder_list(fields.dig(field, 1), edits) }
       end
     end
   end

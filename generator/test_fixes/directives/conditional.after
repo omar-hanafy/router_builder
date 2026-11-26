@@ -1,0 +1,11 @@
+// Documentation URL: package:router_builder/builder.dart
+import 'reexport.dart'
+    if (dart.library.io) /* native */ "package:router_builder_generator/builder.dart"
+    as builder show RouterBuilderError;
+
+export 'reexport.dart'
+    if (dart.library.html) /* browser */ 'package:router_builder_generator/builder.dart'
+    show generateRouteInfoHelperBuilder;
+
+const diagnosticExample = 'package:router_builder/builder.dart';
+final error = builder.RouterBuilderError('conditional');

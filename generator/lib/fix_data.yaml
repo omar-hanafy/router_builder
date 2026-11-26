@@ -1,8 +1,34 @@
 version: 1
 transforms:
-  - title: 'Import the standalone router_builder_generator builder'
+  - title: 'Use builder errors from router_builder_generator'
     date: 2026-11-26
-    library: 'package:router_builder/builder.dart'
+    element:
+      uris: ['package:router_builder/builder.dart']
+      class: RouterBuilderError
     changes:
       - kind: 'replacedBy'
-        newLibrary: 'package:router_builder_generator/builder.dart'
+        newElement:
+          uris: ['package:router_builder_generator/builder.dart']
+          class: RouterBuilderError
+  - title: 'Use builder error constructors from router_builder_generator'
+    date: 2026-11-26
+    element:
+      uris: ['package:router_builder/builder.dart']
+      constructor: ''
+      inClass: RouterBuilderError
+    changes:
+      - kind: 'replacedBy'
+        newElement:
+          uris: ['package:router_builder_generator/builder.dart']
+          constructor: ''
+          inClass: RouterBuilderError
+  - title: 'Use the builder factory from router_builder_generator'
+    date: 2026-11-26
+    element:
+      uris: ['package:router_builder/builder.dart']
+      function: generateRouteInfoHelperBuilder
+    changes:
+      - kind: 'replacedBy'
+        newElement:
+          uris: ['package:router_builder_generator/builder.dart']
+          function: generateRouteInfoHelperBuilder

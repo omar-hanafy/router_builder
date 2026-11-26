@@ -10,6 +10,8 @@
   Regeneration requires Dart 3.11 or later.
 - Custom build configurations use the
   `router_builder_generator:generate_route_info_helper` key. For direct
-  builder imports and exports, run `dart fix --apply` after upgrading both
-  packages, or replace the old URI with
-  `package:router_builder_generator/builder.dart`.
+  builder imports and exports, preview
+  `dart run router_builder_generator:migrate_builder_imports` after upgrading
+  both packages, then add `--write` to apply the URI changes. The command
+  preserves prefixes, combinators and conditional directives. Data-driven
+  `dart fix` transforms also cover unprefixed builder references.

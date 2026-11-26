@@ -1,0 +1,5 @@
+import 'package:router' /* keep this comment */ '_builder_generator/builder.dart'
+    as old hide RouterBuilderError;
+
+const sample = "import 'package:router_builder/builder.dart';";
+final factory = old.generateRouteInfoHelperBuilder;
