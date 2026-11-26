@@ -18,6 +18,142 @@ This guide collects everything you need to move between major versions of
 
 ---
 
+## v3 -> v4
+
+The v4 runtime and the code generator ship in separate packages. The generator
+is now `router_builder_generator`.
+
+Route declarations and application imports of `package:router_builder/router_builder.dart`
+work as before. Custom builders that import or export the old Dart builder
+library must update that URI. Start the hosted upgrade once both packages are
+available at 4.0.0.
+
+### Why
+
+Until v4, `router_builder` declared `analyzer`, `build`, `source_gen`, and
+`dart_style` as regular **`dependencies`**. Keeping the generator's code out of
+the runtime barrel stopped those packages from being *imported* by an app, but
+it did not stop pub's solver from having to *resolve* them. Two consequences:
+
+- Every app that depended on `router_builder` carried `analyzer` in its
+  production dependency graph, and `router_builder`'s upper bound capped what
+  the app could upgrade to - `build_runner`, `build`, and `dart_style`
+  included.
+- Any package that depended on `router_builder` passed that constraint on to
+  *its* consumers transitively, because regular dependencies are transitive.
+
+In v4 the runtime package depends only on `flutter`, `dart_helper_utils`, and
+`equatable`. The generator is a build-time `dev_dependency`, and
+`dev_dependencies` apply only within the consuming project. A package that
+uses the runtime no longer passes the generator's constraints on to its users.
+
+### Updating dependencies
+
+Applications that regenerate routes need these two constraints. Applications
+that ship an existing generated file can update the runtime alone.
+
+```yaml
+dependencies:
+  router_builder: ^4.0.0
+
+dev_dependencies:
+  router_builder_generator: ^4.0.0
+```
+
+Keep your existing `build_runner` dependency. If your own package's published
+builder imports or re-exports the generator from `lib/`, declare
+`router_builder_generator` in that package's regular `dependencies` so its
+consumers can resolve the builder.
+
+### Applying the YAML changes
+
+For a project that regenerates routes, run the bundled script from the app
+directory. It requires Ruby with its standard YAML library.
+
+```bash
+script=/path/to/router_builder/tool/migrate_to_v4.sh
+"$script"
+"$script" --write
+```
+
+The first command previews a diff. The second updates hosted, single-line v3
+constraints. It adds the generator to `dev_dependencies` for packages that
+declare `build_runner`. In a runtime-only package it updates the runtime
+constraint. The script also updates
+standard builder configuration in that package's `build.yaml`, including
+target and global options, explicit builder imports, and builder ordering
+and application lists. Existing comments and quotes are preserved.
+
+Review any package the script marks for manual editing. For a pub workspace,
+check the shared resolution and its overrides. For explicit YAML keys or
+indented dependency blocks, edit the constraints in their existing form.
+Keep intentional
+path, Git and override sources and point them at compatible v4 checkouts
+yourself. For custom constraints or inline dependency maps, edit the two
+dependencies directly. If another package supplies your build runner, choose
+the generator dependency explicitly and check the wrapper settings. The builder key is now
+`router_builder_generator:generate_route_info_helper` and the builder import
+in YAML is `package:router_builder_generator/builder.dart`.
+
+### Migrating Dart imports and exports
+
+Run `flutter pub get` after updating the manifest. For a custom Dart builder
+that imports or re-exports `package:router_builder/builder.dart`, preview the
+affected directive locations, then apply the update.
+
+```bash
+dart run router_builder_generator:migrate_builder_imports
+dart run router_builder_generator:migrate_builder_imports --write
+```
+
+The command changes the URI to `package:router_builder_generator/builder.dart`,
+including alternatives in conditional imports and exports. It preserves prefixes,
+`show` and `hide` clauses, comments, and ordinary string literals. To limit the
+scope, pass one or more Dart source files or directories. Each selected directory
+is scanned up to nested package boundaries. Pass a nested package directory or
+a file inside it explicitly when that package is also upgrading. Repeating the
+command after migration reports zero changes. You can also edit the old URI directly.
+
+The deprecated runtime library points developers to the generator, where
+`generateRouteInfoHelperBuilder` and `RouterBuilderError` keep their names.
+The generator also provides `dart fix` element fixes for unprefixed uses.
+Running `dart fix` alone can leave prefixed factory references or re-exports
+unresolved and can drop a `show` clause. Run the dedicated command first to
+retain the full directives. Route annotations and models still come from
+`package:router_builder/router_builder.dart`.
+
+### Regenerating and verifying
+
+```bash
+dart run build_runner build
+flutter analyze
+flutter test
+```
+
+Review the regenerated `lib/routes.g.dart` with the dependency and import
+changes. The resolved `dart_style` version may change line breaks.
+
+### SDK compatibility
+
+Check the generator's Dart SDK constraint and the analyzer range supported by
+your Flutter SDK. For example, Flutter 3.44's `meta` pin allows analyzer
+13.0.0. Applications that use only the v4 runtime do not resolve the generator
+or its analyzer dependency.
+
+### Quick reference (v3 -> v4)
+
+| v3 | v4 |
+| --- | --- |
+| `dependencies: router_builder` (pulls analyzer) | `dependencies: router_builder` (runtime only) |
+| generator bundled in `router_builder` | `dev_dependencies: router_builder_generator` |
+| `package:router_builder/builder.dart` | `package:router_builder_generator/builder.dart` |
+| `router_builder:generate_route_info_helper` | `router_builder_generator:generate_route_info_helper` |
+| `analyzer >=9.0.0 <13.0.0` | `analyzer >=13.0.0 <15.0.0` |
+| `source_gen` dependency | removed (was unused) |
+| `import 'package:router_builder/router_builder.dart';` | unchanged |
+
+---
+
 ## v2 -> v3
 
 v3 makes one idea central: **all cascading route behavior lives in a single

@@ -17,4 +17,14 @@ docs/
 plugins/
 AGENTS.md
 CLAUDE.md
+tool/stage_runtime_archive.sh
 tool/validate_plugin.dart
+tool/test_analyzer_matrix.sh
+tool/test_v4_migration.py
+tool/verify_generation.sh
+
+# The private example resolves its generator from a public source.
+example/pubspec_overrides.yaml
+
+# Pub applies repository ignore rules to nested package publications as well.
+# The runtime archive is staged from the release revision without generator/.

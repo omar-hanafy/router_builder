@@ -1,12 +1,14 @@
-# Generator reference (router_builder v3)
+# Generator reference
 
-Verified against `lib/src/generators/generate_route_info_helper.dart` and the
-package `build.yaml` at v3.0.x.
+The v4 builder is defined in `generator/build.yaml` and implemented in
+`generator/lib/src/generate_route_info_helper.dart`.
 
 ## What the builder is
 
 One aggregating builder (`generateRouteInfoHelperBuilder`, exported from
-`package:router_builder/builder.dart`) that scans every resolvable library
+`package:router_builder_generator/builder.dart` in v4+, and from
+`package:router_builder/builder.dart` in 3.x and earlier) that scans every
+resolvable library
 under the consuming package's `lib/**.dart` and writes ONE output file.
 It ships with `auto_apply: dependents` and `build_to: source`, so a consumer
 app needs NO build.yaml at all for default behavior. Run:
@@ -44,9 +46,9 @@ Override in the CONSUMER app's `build.yaml`:
 targets:
   $default:
     builders:
-      router_builder|generate_route_info_helper:
+      router_builder_generator:generate_route_info_helper:
         options:
-          output: lib/routes.g.dart          # also update build_extensions if you fully redefine the builder
+          output: lib/routes.g.dart
           route_class_name: Routes
           helper_class_name: RoutesHelper
           fail_on_conflict: true
@@ -115,19 +117,23 @@ runtime) cannot be extracted; keep `RouteInfo` names as literals.
 4. `Conflicting outputs` prompt (older build_runner only): rerun with
    `--delete-conflicting-outputs`.
 5. Dependency solve failures mentioning `analyzer`, `build`, `source_gen`, or
-   `dart_style`: router_builder 3.0.1+ allows `analyzer >=9.0.0 <13.0.0`.
-   Find the package pinning an incompatible range (`dart pub deps` or read the
-   solver output), upgrade it, and only use `dependency_overrides` as a
-   last-resort diagnostic, never a shipped fix.
+   `dart_style`: which package owns the constraint depends on the major.
+   In 3.x and earlier `router_builder` itself declared them as regular
+   `dependencies` (3.0.1+ allowed `analyzer >=9.0.0 <13.0.0`), so it caps the
+   app's build chain — the structural fix is the 4.x upgrade
+   (`migrate-v3-to-v4`), which moves them behind a `dev_dependency`. In 4.x
+   the constraint lives in `router_builder_generator`
+   (`analyzer >=13.0.0 <15.0.0`). For a conflict involving `meta`, identify
+   the Flutter SDK constraint and the other package pinning an
+   incompatible range (`dart pub deps` or read the solver output), upgrade it,
+   and only use `dependency_overrides` as a last-resort diagnostic, never a
+   shipped fix.
 6. Generated file has analyzer warnings in the IDE: the file starts with
    `ignore_for_file: type=lint`; project analysis_options that exclude
    `**/*.g.dart` are the conventional companion.
 
 ## Package-repo test note (maintainers)
 
-Generator tests in THIS repo are tagged `generator` and skipped under
-`flutter test` (build_test needs the Dart VM runner). Run them with:
-
-```bash
-dart test --run-skipped test/generator/
-```
+Run `dart test` in `generator/` and `flutter test` in the runtime root.
+`tool/verify_generation.sh` builds the Flutter example from source and tests
+the generated helpers.

@@ -1,9 +1,6 @@
-/// Build entrypoint for router_builder's code generator.
+/// Migration marker for imports of the v3 code generator.
 ///
-/// Referenced by `build.yaml`. Kept separate from the runtime barrel so the
-/// generator's heavy dependencies (analyzer, build, dart_style) never reach
-/// consumer apps.
+/// After adding the generator dependency, run
+/// `dart run router_builder_generator:migrate_builder_imports --write`.
+@Deprecated('Use package:router_builder_generator/builder.dart.')
 library;
-
-export 'src/generators/generate_route_info_helper.dart'
-    show generateRouteInfoHelperBuilder, RouterBuilderError;

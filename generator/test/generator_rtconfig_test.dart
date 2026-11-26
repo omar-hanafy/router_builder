@@ -1,6 +1,3 @@
-@Tags(['generator'])
-library;
-
 import 'package:build_test/build_test.dart';
 import 'package:test/test.dart';
 
@@ -44,10 +41,10 @@ void main() {
     await testBuilder(
       generator(),
       assets({'lib/app_routes.dart': _single}),
-      rootPackage: 'router_builder',
-      readerWriter: await reader(),
+      rootPackage: rootPackage,
+      readerWriter: stubReader(),
       outputs: {
-        'router_builder|lib/routes.g.dart': decodedMatches(
+        defaultOutput: decodedMatches(
           matches(
             RegExp(
               r'RouterBuilderConfig\.setDefaults\(_i\d+\.appRoutePolicy\)',
@@ -62,8 +59,8 @@ void main() {
     final result = await testBuilder(
       generator(),
       assets({'lib/c.dart': _duplicate}),
-      rootPackage: 'router_builder',
-      readerWriter: await reader(),
+      rootPackage: rootPackage,
+      readerWriter: stubReader(),
       onLog: (_) {},
     );
     expect(result.succeeded, isFalse);
@@ -74,8 +71,8 @@ void main() {
     final result = await testBuilder(
       generator(),
       assets({'lib/c.dart': _nonConst}),
-      rootPackage: 'router_builder',
-      readerWriter: await reader(),
+      rootPackage: rootPackage,
+      readerWriter: stubReader(),
       onLog: (_) {},
     );
     expect(result.succeeded, isFalse);

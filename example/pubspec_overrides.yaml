@@ -1,0 +1,4 @@
+# Develop against the sibling generator. The runtime archive omits this file.
+dependency_overrides:
+  router_builder_generator:
+    path: ../generator

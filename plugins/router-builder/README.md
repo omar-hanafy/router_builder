@@ -40,7 +40,8 @@ uninstall/remove command.
 | `debug-deep-links` | Links opening the wrong screen or nothing; custom-scheme vs https differences; allowedHosts questions |
 | `debug-generation` | routes.g.dart missing/stale; RouterBuilderError; @RT discovery; analyzer/dependency conflicts; builder options |
 | `review-routes` | Auditing all route declarations for auth gaps, key collisions, policy misuse |
-| `upgrade-router-builder` | Choosing the upgrade path between majors |
+| `upgrade-router-builder` | Choosing the upgrade path between majors; router_builder capping an analyzer/build_runner upgrade |
+| `migrate-v3-to-v4` | The 3.x → 4.x generator split, including YAML and custom builder directives |
 | `migrate-v2-to-v3` | The breaking 2.x -> 3.x migration (bundled codemod + manual folds) |
 
 On both platforms skills are namespaced `router-builder:<skill>`: invoke
@@ -69,17 +70,21 @@ Example prompts:
 
 - Skills are instructions plus reference documents; they run no code by
   themselves.
-- The one bundled executable is `skills/migrate-v2-to-v3/scripts/migrate_to_v3.sh`,
-  a dry-run-by-default, perl-based textual codemod (byte-identical copy of
-  `tool/migrate_to_v3.sh` in the package repo; CI-verified parity). Agents are
-  instructed to show you the dry-run diff before applying `--write`.
+- The bundled executables are the migration codemods,
+  `skills/migrate-v2-to-v3/scripts/migrate_to_v3.sh` and
+  `skills/migrate-v3-to-v4/scripts/migrate_to_v4.sh`. Both preview a diff
+  by default and apply edits with `--write`. The v2 script uses Perl.
+  The v3 script uses Ruby and its standard YAML library. CI checks that
+  both copies match the originals in `tool/`.
 - No hooks, no MCP servers, no network access, no telemetry.
 - The `route-auditor` agent is restricted to read-only tools.
 
 ## Compatibility
 
-- Skill content targets router_builder 3.x (and knows how to recognize and
-  migrate 2.x code). The plugin version tracks the package version.
+- Skill content targets router_builder 4.x (and knows how to recognize and
+  migrate 3.x and 2.x code). The plugin version tracks the package version.
+- router_builder 4.x needs Flutter 3.44 or newer to regenerate; the skills
+  check this before proposing the upgrade.
 - Claude Code >= 2.x (plugins + marketplaces). Codex CLI >= 0.144 / ChatGPT
   Work mode (plugins are not available in the Codex IDE extension or mobile).
 

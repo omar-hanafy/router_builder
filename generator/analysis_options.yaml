@@ -1,0 +1,69 @@
+include: package:lints/recommended.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  exclude:
+    - build/**
+    - .dart_tool/**
+    # Legacy consumers in this directory are inputs to dart fix.
+    - test_fixes/**
+  errors:
+    always_use_package_imports: error
+    avoid_relative_lib_imports: error
+    depend_on_referenced_packages: error
+    implementation_imports: error
+    public_member_api_docs: error
+    secure_pubspec_urls: error
+    library_private_types_in_public_api: warning
+    directives_ordering: warning
+    deprecated_member_use_from_same_package: warning
+    unawaited_futures: warning
+    comment_references: info
+
+linter:
+  rules:
+    always_use_package_imports: true
+    avoid_relative_lib_imports: true
+    depend_on_referenced_packages: true
+    implementation_imports: true
+    public_member_api_docs: true
+    secure_pubspec_urls: true
+    library_private_types_in_public_api: true
+    comment_references: true
+    deprecated_member_use_from_same_package: true
+    directives_ordering: true
+    combinators_ordering: true
+    sort_pub_dependencies: true
+    avoid_slow_async_io: true
+    cancel_subscriptions: true
+    unawaited_futures: true
+    only_throw_errors: true
+    throw_in_finally: true
+    avoid_type_to_string: true
+    test_types_in_equals: true
+    no_self_assignments: true
+    no_literal_bool_comparisons: true
+    unnecessary_statements: true
+    avoid_multiple_declarations_per_line: true
+    avoid_bool_literals_in_conditional_expressions: true
+    matching_super_parameters: true
+    unnecessary_parenthesis: true
+    use_string_buffers: true
+    use_enums: true
+    document_ignores: true
+    avoid_positional_boolean_parameters: true
+    avoid_equals_and_hash_code_on_mutable_classes: true
+    use_setters_to_change_properties: true
+    avoid_returning_this: true
+    prefer_asserts_with_message: true
+    prefer_const_constructors: true
+    prefer_single_quotes: true
+
+    # The package uses package imports and relies on dart format for line breaks.
+    prefer_relative_imports: false
+    lines_longer_than_80_chars: false
+    constant_identifier_names: false
+    avoid_print: false

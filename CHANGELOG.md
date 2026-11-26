@@ -1,4 +1,21 @@
 # CHANGELOG
+## 4.0.0
+
+- **Breaking.** The code generator moved to `router_builder_generator`.
+  Applications that regenerate routes must add `router_builder_generator:
+  ^4.0.0` to `dev_dependencies`. Annotations, runtime models, and generated
+  route helpers retain their public names.
+- The runtime depends on Flutter, `dart_helper_utils` and `equatable`. Apps
+  and libraries can now use existing generated routes without resolving
+  the analyzer and build toolchain through the runtime.
+- Custom generator integrations use
+  `router_builder_generator:generate_route_info_helper` in build
+  configuration and `package:router_builder_generator/builder.dart` in
+  builder imports. Preview direct Dart import and export migrations with
+  `dart run router_builder_generator:migrate_builder_imports` after upgrading
+  both packages. Add `--write` to apply them. The generator requires Dart 3.11 or later and
+  supports analyzer 13.x and 14.x. [Migration guide](MIGRATION_GUIDE.md#v3---v4)
+
 ## 3.1.0
 
 - Added `RouteInfo.location()` and `RouteInfo.locationForArgs()`: the supported

@@ -5,32 +5,87 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  package:
+  runtime:
+    name: router_builder (runtime)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           channel: stable
-          cache: true
       - run: flutter pub get
+      - run: dart pub --directory generator get
       - run: dart format --output=none --set-exit-if-changed .
       - run: dart analyze
       - run: flutter test
-      - run: dart test --run-skipped test/generator/
-      - name: Validate AI plugin tree
-        run: dart tool/validate_plugin.dart
-      - name: Publish dry run
-        run: dart pub publish --dry-run
-      - name: Analyze example
+      - name: Check the runtime graph for build-time dependencies
         run: |
-          cd example
-          flutter pub get
-          dart run build_runner build
-          # Normalize with the SDK formatter before diffing: the generator
-          # formats with the resolved dart_style library, which can lag the
-          # SDK CLI formatter.
-          dart format lib/routes.g.dart
-          git diff --exit-code lib/routes.g.dart
-          flutter analyze
+          for pkg in analyzer build dart_style source_gen glob; do
+            if grep -qE "^  $pkg:$" pubspec.lock; then
+              echo "::error::$pkg is in the runtime dependency graph"
+              exit 1
+            fi
+          done
+      - name: Validate repository plugin
+        run: dart tool/validate_plugin.dart
+      - name: Validate runtime archive
+        run: tool/stage_runtime_archive.sh HEAD "$RUNNER_TEMP/router_builder.tar.gz"
+
+  generator:
+    name: router_builder_generator (${{ matrix.lane }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: floor
+            sdk: '3.11.0'
+          - lane: latest
+            sdk: stable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dart-lang/setup-dart@2286a0c042b44434fe26d292bbce8d34f7ec662b # v1.8.2
+        with:
+          sdk: ${{ matrix.sdk }}
+      - name: Resolve, analyze and test
+        env:
+          LANE: ${{ matrix.lane }}
+        run: tool/test_analyzer_matrix.sh "$LANE"
+      - if: matrix.lane == 'floor'
+        name: Verify migrations on the minimum Dart SDK
+        run: python3 tool/test_v4_migration.py --standalone
+      - if: matrix.lane == 'latest'
+        working-directory: generator
+        run: |
+          dart pub get
+          dart format --output=none --set-exit-if-changed .
+          dart pub publish --dry-run
+
+  example:
+    name: example (Flutter ${{ matrix.version || 'stable' }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['3.44.0', '']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: ${{ matrix.version }}
+      - name: Generate, compare and exercise routes
+        run: tool/verify_generation.sh
+      - name: Migrate a client of the published 3.x builder
+        if: matrix.version == ''
+        run: python3 tool/test_v4_migration.py

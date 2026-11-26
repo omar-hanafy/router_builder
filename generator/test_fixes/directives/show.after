@@ -1,0 +1,3 @@
+import 'package:router_builder_generator/builder.dart' show RouterBuilderError;
+
+final error = RouterBuilderError('duplicate route');

@@ -7,7 +7,7 @@ Router Builder simplifies Flutter route management and deep linking through code
 This repository ships an installable **agent plugin** for **Claude Code** and
 **OpenAI Codex** with package-specific skills: project setup, adding routes,
 policy and deep-link debugging, generation troubleshooting, route audits, and
-the automated **v2 -> v3 migration**. It extends your coding agent only - it
+migrations from 2.x through 4.x. It extends your coding agent only - it
 adds no code, dependency, or telemetry to your Flutter app, and it is
 distributed from this repository (not inside the pub.dev package archive).
 
@@ -33,13 +33,10 @@ invoke a skill explicitly: `/router-builder:add-route` (Claude Code) /
 `$router-builder:add-route` (Codex). Claude Code additionally gets a read-only
 `route-auditor` subagent for full route audits.
 
-Trust notes: the plugin is instructions + reference docs; its one executable
-is the dry-run-by-default v2->v3 codemod script (a byte-identical copy of
-[`tool/migrate_to_v3.sh`](tool/migrate_to_v3.sh)). No hooks, no MCP servers,
-no network access. Skill content targets router_builder 3.x and recognizes
-2.x code. Update via your client's marketplace update/upgrade command; remove
-with its uninstall/remove command. Full details, the skill catalog, and
-maintainer docs: [`plugins/router-builder/README.md`](plugins/router-builder/README.md).
+The plugin includes the v2-to-v3 and v3-to-v4 migration scripts. Each previews
+its edits by default. The copies bundled with the plugin match the scripts
+under `tool/`. Installation and update instructions are in the
+[plugin guide](plugins/router-builder/README.md).
 
 ## Features
 
@@ -68,11 +65,23 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  router_builder: ^3.0.0
+  router_builder: ^4.0.0
 
 dev_dependencies:
   build_runner: ^2.15.0
+  router_builder_generator: ^4.0.0
 ```
+
+`router_builder` is the runtime (annotations, `RouteInfo`, policies, deep
+links). `router_builder_generator` is the build-time generator and belongs in
+`dev_dependencies` — that is what keeps `analyzer`, `build`, and `dart_style`
+out of your app's production dependency graph, where they would otherwise cap
+which versions you are allowed to upgrade to.
+
+> Upgrading from 3.x? Route annotations and models keep their imports.
+> Apps that regenerate routes add the generator to their dev dependencies.
+> Custom builders also update build configuration and any direct Dart imports
+> or exports of the old builder. [Migration guide](MIGRATION_GUIDE.md#v3---v4)
 
 ### Basic Usage
 
@@ -322,9 +331,9 @@ a policy tries to set a conflicting value.
 
 ## Migration Guide
 
-See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for the full v2 -> v3 upgrade
-(automated codemods in `tool/migrate_to_v3.sh` plus the manual steps), the older
-deep-link-registry migration, and a template for future releases.
+The migration guide covers the v4 generator split, the v2-to-v3 changes
+and the older deep-link registry. It includes preview commands and the steps
+that need a manual edit. [Migration guide](MIGRATION_GUIDE.md)
 
 ## License
 

@@ -1,5 +1,5 @@
-import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:build/build.dart';
 import 'package:dart_style/dart_style.dart';
@@ -185,12 +185,11 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     final init = (node is VariableDeclaration) ? node.initializer : null;
     final creation = init is InstanceCreationExpression ? init : null;
     final ctorName = creation?.constructorName.name?.name;
-    final kind =
-        ctorName == 'branch'
-            ? 'branch'
-            : ctorName == 'redirect'
-            ? 'redirect'
-            : 'standard';
+    final kind = ctorName == 'branch'
+        ? 'branch'
+        : ctorName == 'redirect'
+        ? 'redirect'
+        : 'standard';
 
     final value = element.computeConstantValue();
 
@@ -241,10 +240,16 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     }
   }
 
+  /// The first positional argument, or `null` if the call is all-named.
+  ///
+  /// Since analyzer 13 an [ArgumentList] holds [Argument] nodes rather than
+  /// [Expression] nodes. A positional argument is still an [Expression]
+  /// (`Expression implements Argument`); a named one is a [NamedArgument],
+  /// which is not. The type test therefore selects positional arguments.
   Expression? _positionalExpr(InstanceCreationExpression? creation) {
     if (creation == null) return null;
     for (final arg in creation.argumentList.arguments) {
-      if (arg is! NamedExpression) return arg;
+      if (arg is Expression) return arg;
     }
     return null;
   }
@@ -254,11 +259,16 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     return expr is StringLiteral ? expr.stringValue : null;
   }
 
+  /// The expression bound to the named argument [name], if present.
+  ///
+  /// Since analyzer 13 a named argument is a [NamedArgument] whose `name` is a
+  /// `Token` (previously a `NamedExpression` wrapping a `Label`), and whose
+  /// value is exposed as `argumentExpression`.
   Expression? _namedExpr(InstanceCreationExpression? creation, String name) {
     if (creation == null) return null;
     for (final arg in creation.argumentList.arguments) {
-      if (arg is NamedExpression && arg.name.label.name == name) {
-        return arg.expression;
+      if (arg is NamedArgument && arg.name.lexeme == name) {
+        return arg.argumentExpression;
       }
     }
     return null;
@@ -279,13 +289,12 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     String field,
     InstanceCreationExpression? creation,
   ) {
-    final fromConst =
-        value
-            ?.getField(field)
-            ?.toListValue()
-            ?.map((e) => e.toStringValue())
-            .whereType<String>()
-            .toList();
+    final fromConst = value
+        ?.getField(field)
+        ?.toListValue()
+        ?.map((e) => e.toStringValue())
+        .whereType<String>()
+        .toList();
     if (fromConst != null) return fromConst;
     final expr = _namedExpr(creation, field);
     if (expr is ListLiteral) {
@@ -314,14 +323,13 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     final prefixes = _assignImportPrefixes(collected);
     _qualifyRefs(collected, prefixes);
     final routes = collected.routes;
-    final buffer =
-        StringBuffer()
-          ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND.')
-          ..writeln('//')
-          ..writeln('// Run: dart run build_runner build')
-          ..writeln()
-          ..writeln('// ignore_for_file: type=lint')
-          ..writeln();
+    final buffer = StringBuffer()
+      ..writeln('// GENERATED CODE - DO NOT MODIFY BY HAND.')
+      ..writeln('//')
+      ..writeln('// Run: dart run build_runner build')
+      ..writeln()
+      ..writeln('// ignore_for_file: type=lint')
+      ..writeln();
     _writeImports(buffer, prefixes);
     _writeRoutesClass(buffer, routes);
     _writeHelperClass(buffer, collected);
@@ -373,8 +381,8 @@ class GenerateRouteInfoHelperBuilder implements Builder {
     buffer
       ..writeln("import 'package:dart_helper_utils/dart_helper_utils.dart';")
       ..writeln("import 'package:router_builder/router_builder.dart';");
-    final entries =
-        prefixes.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    final entries = prefixes.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
     for (final e in entries) {
       buffer.writeln("import '${e.key}' as ${e.value};");
     }
@@ -448,12 +456,11 @@ class GenerateRouteInfoHelperBuilder implements Builder {
         ),
       );
     }
-    final buffer =
-        StringBuffer()
-          ..writeln('  /// Branch routes grouped by shell enum value.')
-          ..writeln(
-            '  static final Map<$enumType, Map<int?, RouteInfo>> branches = {',
-          );
+    final buffer = StringBuffer()
+      ..writeln('  /// Branch routes grouped by shell enum value.')
+      ..writeln(
+        '  static final Map<$enumType, Map<int?, RouteInfo>> branches = {',
+      );
     grouped.forEach((parent, list) {
       buffer.writeln('    $parent: {');
       for (final f in list) {
@@ -579,12 +586,11 @@ $nonBranch
       }
       log.warning('Deep-link key conflict(s) (keeping first):\n$detail');
     }
-    final buffer =
-        StringBuffer()
-          ..writeln(
-            '  /// Lookup by deep-link key (route name, first path segment, alias).',
-          )
-          ..writeln('  static final Map<String, RouteInfo> deepLinkMap = {');
+    final buffer = StringBuffer()
+      ..writeln(
+        '  /// Lookup by deep-link key (route name, first path segment, alias).',
+      )
+      ..writeln('  static final Map<String, RouteInfo> deepLinkMap = {');
     for (final key in map.keys.toList()..sort()) {
       buffer.writeln("    '$key': ${map[key]},");
     }
